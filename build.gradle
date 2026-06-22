@@ -1,0 +1,156 @@
+/*
+ * structured-importer: build.gradle
+ */
+buildscript {
+    ext {
+        vXnat = "1.9.3"
+    }
+}
+
+plugins {
+    id "java-library"
+    id "org.nrg.xnat.build.xnat-data-builder" version "${vXnat}"
+    id "io.freefair.lombok" version "8.14.4"
+}
+
+group = "org.nrg.xnatx.plugins"
+version = "1.0.0-SNAPSHOT"
+description = "XNAT Structured Importer"
+
+repositories {
+    mavenLocal()
+    maven { url = "https://www.dcm4che.org/maven2" }
+    maven { url = "https://nrgxnat.jfrog.io/nrgxnat/libs-release" }
+    maven { url = "https://nrgxnat.jfrog.io/nrgxnat/libs-snapshot" }
+    mavenCentral()
+}
+
+configurations {
+    implementation.extendsFrom(xnatProvided)
+    implementation.canBeResolved = true
+    testImplementation.exclude group: "org.slf4j", module: "log4j-over-slf4j"
+    configureEach {
+        exclude group: "org.redisson"
+    }
+}
+
+dependencies {
+    xnatProvided platform("org.nrg:parent:${vXnat}")
+    xnatProvided "org.nrg:framework"
+    xnatProvided "org.nrg.xnat:xnat-data-models"
+    xnatProvided "org.nrg.xnat:web"
+    xnatProvided "org.nrg.xdat:core"
+    xnatProvided "org.nrg:dicom-xnat-mx"
+    xnatProvided "dcm4che:dcm4che-core"
+    xnatProvided "io.springfox:springfox-swagger2"
+    xnatProvided "io.springfox:springfox-swagger-ui"
+    xnatProvided "io.projectreactor:reactor-bus"
+    xnatProvided "org.apache.commons:commons-compress"
+    xnatProvided "javax.validation:validation-api:2.0.1.Final"
+
+    testImplementation "com.fasterxml.jackson.datatype:jackson-datatype-guava"
+    testImplementation "junit:junit"
+    testImplementation "com.h2database:h2"
+    testImplementation "org.hamcrest:hamcrest-library"
+    testImplementation "org.mockito:mockito-core:4.8.0"
+    testImplementation "org.springframework:spring-test"
+    testImplementation "org.springframework.security:spring-security-test"
+    testImplementation "org.springframework.security:spring-security-config"
+    testImplementation "org.springframework:spring-jdbc"
+    testImplementation "org.springframework:spring-orm"
+    testImplementation "org.apache.commons:commons-dbcp2"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine"
+}
+
+test {
+    useJUnit()
+    systemProperties["xnat.home"] = compileJava.destinationDirectory.get().dir("/tmp/test").asFile.absolutePath
+    testLogging {
+        events "passed", "skipped", "failed"
+        showStandardStreams = false
+        afterSuite { desc, result ->
+            if (!desc.parent) {
+                println "\nTest results: ${result.resultType} (${result.testCount} tests, ${result.successfulTestCount} passed, ${result.failedTestCount} failed, ${result.skippedTestCount} skipped)"
+            }
+        }
+    }
+}
+
+def buildDate = new Date()
+// Pulls in GitHub Actions environment variables if available.
+def github_actor = System.getenv().GITHUB_ACTOR ?: "Unknown"
+def github_repo = System.getenv().GITHUB_REPOSITORY ?: "Unknown"
+def github_sha = System.getenv().GITHUB_SHA ?: "Unknown"
+def github_ref = System.getenv().GITHUB_REF ?: "Unknown"
+
+logger.info("Building plugin: ${project.name} ${project.version} on ${buildDate}")
+logger.info("GitHub actor: ${github_actor}")
+logger.info("GitHub repository: ${github_repo}")
+logger.info("GitHub SHA: ${github_sha}")
+logger.info("GitHub ref: ${github_ref}")
+
+// Configure the compileJava task to call the xnatDataBuilder task before trying to compile any
+// Java code in the plugin. This is required for custom data types
+compileJava {
+    dependsOn project.tasks.named("xnatDataBuilder")
+}
+
+// Not required in a standard build, but the XNAT data builder generates code from XNAT data-type
+// schemas that the compiler needs to know about.
+sourceSets {
+    main {
+        java {
+            srcDir "src/main/java"
+            srcDir "build/xnat-generated/src/main/java"
+        }
+        resources {
+            srcDir "src/main/resources"
+            srcDir "build/xnat-generated/src/main/resources"
+        }
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+tasks.withType(Jar).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes "Application-Name": "XNAT Structured Importer Plugin",
+                "Build-Date": buildDate,
+                "GITHUB-ACTOR": github_actor,
+                "GITHUB-REPO": github_repo,
+                "GITHUB-SHA": github_sha,
+                "GITHUB-REF": github_ref
+    }
+}
+
+jar {
+    doLast {
+        if (!gradle.taskGraph.hasTask(":xnatPluginJar")) {
+            logger.warn "WARNING: You should generally run xnatPluginJar instead of jar task for this plugin"
+        }
+    }
+}
+
+tasks.register("xnatPluginJar", Jar) {
+    zip64 = true
+    archiveClassifier = "xpl"
+    from {
+        (configurations.implementation - configurations.xnatProvided).collect { it.isDirectory() ? it : zipTree(it) }
+    } {
+        exclude "META-INF/*.SF"
+        exclude "META-INF/*.DSA"
+        exclude "META-INF/*.RSA"
+    }
+    with jar
+}
+
+tasks.register("deploy-jar", Copy) {
+    description = "Copies the JAR file to a specified location. Requires the 'filePath' property to be set. Example: ./gradlew clean jar deploy-jar -PfilePath=/path/to/destination"
+    from jar
+    into project.findProperty("filePath")
+}
+
