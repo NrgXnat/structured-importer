@@ -9,8 +9,10 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,21 +30,17 @@ public class SimpleResourceIdentifierService implements ResourceIdentifierServic
     @Override
     public Map<ScanResource, List<Path>> extractResource(final Path extractedArchive, final UserI user, final String projectId) {
         log.info("Identifying scan resources under {}", extractedArchive);
-        final Map<ScanResource, List<Path>> resources = new HashMap<>();
-        try (final DirectoryStream<Path> scanDirs = Files.newDirectoryStream(extractedArchive, Files::isDirectory)) {
-            for (final Path scanDir : scanDirs) {
+        final Map<ScanResource, List<Path>> resources = new LinkedHashMap<>();
+        try {
+            for (final Path scanDir : sortedSubdirectories(extractedArchive)) {
                 final String scanId = scanDir.getFileName().toString();
-                try (final DirectoryStream<Path> modalityDirs = Files.newDirectoryStream(scanDir, Files::isDirectory)) {
-                    for (final Path modalityDir : modalityDirs) {
-                        final String modality = modalityDir.getFileName().toString();
-                        try (final DirectoryStream<Path> resourceDirs = Files.newDirectoryStream(modalityDir, Files::isDirectory)) {
-                            for (final Path resourceDir : resourceDirs) {
-                                final String       name     = resourceDir.getFileName().toString();
-                                final ScanResource resource = new ScanResource(null, null, scanId, modality, name, null, null, null, null);
-                                log.debug("Identified scan resource {} at {}", resource, resourceDir);
-                                resources.put(resource, Collections.singletonList(resourceDir));
-                            }
-                        }
+                for (final Path modalityDir : sortedSubdirectories(scanDir)) {
+                    final String modality = modalityDir.getFileName().toString();
+                    for (final Path resourceDir : sortedSubdirectories(modalityDir)) {
+                        final String       name     = resourceDir.getFileName().toString();
+                        final ScanResource resource = new ScanResource(null, null, scanId, modality, name, null, null, null, null);
+                        log.debug("Identified scan resource {} at {}", resource, resourceDir);
+                        resources.put(resource, Collections.singletonList(resourceDir));
                     }
                 }
             }
@@ -50,5 +48,19 @@ public class SimpleResourceIdentifierService implements ResourceIdentifierServic
             log.error("Error walking extracted archive {}", extractedArchive, e);
         }
         return resources;
+    }
+
+    /**
+     * Lists the immediate subdirectories of {@code directory}, sorted by name, so
+     * the resulting scan/modality/resource ordering is deterministic regardless
+     * of the order the filesystem reports directory entries in.
+     */
+    private static List<Path> sortedSubdirectories(final Path directory) throws IOException {
+        final List<Path> subdirectories = new ArrayList<>();
+        try (final DirectoryStream<Path> stream = Files.newDirectoryStream(directory, Files::isDirectory)) {
+            stream.forEach(subdirectories::add);
+        }
+        subdirectories.sort(Comparator.comparing(path -> path.getFileName().toString()));
+        return subdirectories;
     }
 }
