@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.nrg.config.entities.Configuration;
 import org.nrg.config.exceptions.ConfigServiceException;
 import org.nrg.config.services.ConfigService;
@@ -62,6 +62,10 @@ public class DefaultCsvImportConfigService implements CsvImportConfigService {
         if (config == null || config.getConfigData() == null || StringUtils.isBlank(config.getConfigData().getContents())) {
             return null;
         }
+        if (Configuration.DISABLED_STRING.equalsIgnoreCase(config.getStatus())) {
+            log.debug("Structured CSV import column mappings for scope {} entity {} are disabled; treating as not configured", scope, entityId);
+            return null;
+        }
         try {
             return mapper.readValue(config.getConfigData().getContents(), new TypeReference<List<CsvColumnMapping>>() {});
         } catch (IOException e) {
@@ -88,6 +92,26 @@ public class DefaultCsvImportConfigService implements CsvImportConfigService {
         }
 
         return getColumnMappings(scope, entityId);
+    }
+
+    @Override
+    public void disableColumnMappings(final UserI user, final Scope scope, final String entityId) {
+        try {
+            configService.disable(user.getUsername(), "Disabling structured CSV import column mappings", TOOL_NAME, COLUMN_MAPPINGS_PATH, scope, entityId);
+        } catch (ConfigServiceException e) {
+            log.error("Error disabling structured CSV import column mappings for scope {} entity {}", scope, entityId, e);
+            throw new RuntimeException("Unable to disable structured CSV import column mappings", e);
+        }
+    }
+
+    @Override
+    public void deleteColumnMappings(final UserI user, final Scope scope, final String entityId) {
+        try {
+            configService.replaceConfig(user.getUsername(), "Deleting structured CSV import column mappings", TOOL_NAME, COLUMN_MAPPINGS_PATH, "", scope, entityId);
+        } catch (ConfigServiceException e) {
+            log.error("Error deleting structured CSV import column mappings for scope {} entity {}", scope, entityId, e);
+            throw new RuntimeException("Unable to delete structured CSV import column mappings", e);
+        }
     }
 
     @Override

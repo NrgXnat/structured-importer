@@ -9,7 +9,7 @@ import org.springframework.context.annotation.ComponentScan;
 @XnatPlugin(value = "StructuredImporterPlugin", name = "XNAT Structured Importer Plugin",
             description = "The XNAT Structured Importer Plugin provides support for creating image sessions from non-DICOM data archives.",
             logConfigurationFile = "structured-importer-logback.xml")
-@ComponentScan({"org.nrg.xnatx.plugins.structimport.initialize", "org.nrg.xnatx.plugins.structimport.services.impl"})
+@ComponentScan({"org.nrg.xnatx.plugins.structimport.initialize", "org.nrg.xnatx.plugins.structimport.rest", "org.nrg.xnatx.plugins.structimport.services.impl"})
 @Slf4j
 public class StructuredImporterPlugin {
     @Bean

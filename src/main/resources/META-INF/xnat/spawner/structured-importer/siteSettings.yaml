@@ -1,0 +1,105 @@
+#########################################################
+####  Root Site Admin Spawner Config Object          ####
+####  Structured Importer — CSV Column Mappings       ####
+#########################################################
+
+siteSettings:
+    kind: tabs
+    name: structuredImporterAdminPage
+    groups:
+        structuredImporterTabGroup: Structured Importer
+    contents:
+        ${csvColumnMappingsTab}
+
+####
+#### Structured Importer Site Settings Panels
+####
+
+csvColumnMappingsTab:
+    kind: tab
+    name: csvColumnMappingsTab
+    label: CSV Column Mappings
+    group: structuredImporterTabGroup
+    active: false
+    contents:
+        ${csvColumnMappingsInfo}
+        ${csvColumnMappingsPanel}
+        ${csvColumnMappingsScript}
+
+csvColumnMappingsInfo:
+    kind: panel
+    name: csvColumnMappingsInfo
+    label: About CSV Column Mappings
+    contents:
+        csvColumnMappingsHelptext:
+            tag: div.message
+            content: >
+                The structured importer's CSV resource identifier service builds image sessions from a CSV
+                manifest packaged with the upload. The mappings below define how columns in that manifest are
+                matched to XNAT metadata. The configuration is a JSON array; each element is an object with the
+                following fields:
+                <ul>
+                    <li><b>column</b> &ndash; the exact header text of the column in the CSV manifest.</li>
+                    <li><b>property</b> &ndash; the XNAT property the column populates (see the supported values below).
+                        Leave this blank to mark the special <b>path</b> column, which locates the file or directory
+                        within the archive rather than setting a property. Exactly one mapping must have a blank property.</li>
+                    <li><b>required</b> &ndash; whether the column must be present in the manifest and have a value.
+                        Defaults to <code>true</code> when omitted.</li>
+                    <li><b>validation</b> &ndash; an optional regular expression that each non-blank value must match.</li>
+                </ul>
+                Supported <b>property</b> values:
+                <ul>
+                    <li><code>xnat:imageScanData/ID</code> &ndash; scan ID</li>
+                    <li><code>xnat:imageScanData/modality</code> &ndash; scan modality (MR, PET, CT, or SR)</li>
+                    <li><code>xnat:imageScanData/series_description</code> &ndash; series description</li>
+                    <li><code>xnat:imageSessionData/label</code> &ndash; session label</li>
+                    <li><code>xnat:imageSessionData/subject_ID</code> &ndash; subject label</li>
+                    <li><code>xnat:imageScanData/start_date</code> &ndash; scan start date</li>
+                    <li><code>xnat:imageScanData/start_time</code> &ndash; scan start time</li>
+                    <li><code>xnat:subjectData/demographics[@xsi:type=xnat:demographicData]/weight</code> &ndash; subject weight</li>
+                    <li><code>xnat:abstractResource/label</code> &ndash; resource label (defaults to NIFTI when blank)</li>
+                </ul>
+        csvColumnMappingsExample:
+            tag: div.message
+            content: |
+                <b>Example configuration (the built-in default):</b>
+                <pre>
+                [
+                  { "column": "Scan ID",            "property": "xnat:imageScanData/ID" },
+                  { "column": "Modality",           "property": "xnat:imageScanData/modality" },
+                  { "column": "Series Description", "property": "xnat:imageScanData/series_description" },
+                  { "column": "Session Label",      "property": "xnat:imageSessionData/label" },
+                  { "column": "Subject ID",         "property": "xnat:imageSessionData/subject_ID" },
+                  { "column": "Start Date",         "property": "xnat:imageScanData/start_date", "required": false },
+                  { "column": "Start Time",         "property": "xnat:imageScanData/start_time", "required": false },
+                  { "column": "Subject Weight (g)", "property": "xnat:subjectData/demographics[@xsi:type=xnat:demographicData]/weight", "required": false },
+                  { "column": "Resource Name",      "property": "xnat:abstractResource/label", "required": false },
+                  { "column": "Path",               "property": "", "required": true }
+                ]
+                </pre>
+            after: >
+                <br>
+
+csvColumnMappingsPanel:
+    kind: panel.form
+    name: csvColumnMappingsPanel
+    label: Site-wide CSV Column Mappings
+    method: POST
+    url: ~/xapi/structured-importer/csv-column-mappings
+    contentType: json
+    contents:
+        columnMappings:
+            kind: panel.textarea
+            id: structured-importer-site-csv
+            name: columnMappings
+            label: Column Mappings (JSON)
+            code: json
+            rows: 24
+            description: >
+                The full list of column mappings as a JSON array. This configuration applies to every project that
+                does not define its own project-level mappings. (Double-click to open in a larger code editor dialog.)
+
+csvColumnMappingsScript:
+    tag: script|src="~/scripts/xnat/plugin/structured-importer/csvColumnMappings.js"
+
+# end

@@ -1,0 +1,108 @@
+####
+#### Structured Importer Project Settings Panels
+#### CSV Column Mappings (project-level override of the site-wide configuration)
+####
+
+projectSettings:
+    kind: tabs
+    name: structuredImporterProjectSettings
+    groups:
+        structuredImporterSettings: Structured Importer
+    contents:
+        ${csvColumnMappingsProjectTab}
+
+csvColumnMappingsProjectTab:
+    kind: tab
+    name: csvColumnMappingsProjectTab
+    label: CSV Column Mappings
+    group: structuredImporterSettings
+    contents:
+        ${csvColumnMappingsProjectInfo}
+        ${csvColumnMappingsProjectPanel}
+        ${csvColumnMappingsProjectManage}
+        ${csvColumnMappingsProjectScript}
+
+csvColumnMappingsProjectInfo:
+    kind: panel
+    name: csvColumnMappingsProjectInfo
+    label: About CSV Column Mappings
+    contents:
+        csvColumnMappingsProjectHelptext:
+            tag: div.message
+            content: >
+                These mappings define how columns in a CSV import manifest are matched to XNAT metadata for imports
+                into <b>this project</b>. When set, they <b>override</b> the site-wide configuration; leave them empty
+                to use the site-wide mappings instead.
+                <br><br>
+                The configuration is a JSON array; each element is an object with the following fields:
+                <ul>
+                    <li><b>column</b> &ndash; the exact header text of the column in the CSV manifest.</li>
+                    <li><b>property</b> &ndash; the XNAT property the column populates. Leave blank to mark the special
+                        <b>path</b> column, which locates the file or directory within the archive. Exactly one mapping
+                        must have a blank property.</li>
+                    <li><b>required</b> &ndash; whether the column must be present and have a value. Defaults to
+                        <code>true</code> when omitted.</li>
+                    <li><b>validation</b> &ndash; an optional regular expression that each non-blank value must match.</li>
+                </ul>
+                Supported <b>property</b> values:
+                <ul>
+                    <li><code>xnat:imageScanData/ID</code> &ndash; scan ID</li>
+                    <li><code>xnat:imageScanData/modality</code> &ndash; scan modality (MR, PET, CT, or SR)</li>
+                    <li><code>xnat:imageScanData/series_description</code> &ndash; series description</li>
+                    <li><code>xnat:imageSessionData/label</code> &ndash; session label</li>
+                    <li><code>xnat:imageSessionData/subject_ID</code> &ndash; subject label</li>
+                    <li><code>xnat:imageScanData/start_date</code> &ndash; scan start date</li>
+                    <li><code>xnat:imageScanData/start_time</code> &ndash; scan start time</li>
+                    <li><code>xnat:subjectData/demographics[@xsi:type=xnat:demographicData]/weight</code> &ndash; subject weight</li>
+                    <li><code>xnat:abstractResource/label</code> &ndash; resource label (defaults to NIFTI when blank)</li>
+                </ul>
+            after: >
+                <br>
+
+csvColumnMappingsProjectPanel:
+    kind: panel.form
+    id: structured-importer-csv-mappings-panel
+    name: csvColumnMappingsProjectPanel
+    label: Project CSV Column Mappings
+    method: POST
+    url: ~/xapi/structured-importer/projects/{{XNAT.data.projectId}}/csv-column-mappings
+    contentType: json
+    contents:
+        columnMappings:
+            kind: panel.textarea
+            id: structured-importer-project-csv
+            name: columnMappings
+            label: Column Mappings (JSON)
+            code: json
+            rows: 24
+            description: >
+                The full list of column mappings as a JSON array, applied to CSV imports into this project. Save with
+                no mappings of your own (using Disable or Delete below) to fall back to the site-wide configuration.
+                (Double-click to open in a larger code editor dialog.)
+
+csvColumnMappingsProjectManage:
+    kind: panel
+    name: csvColumnMappingsProjectManage
+    label: Revert to Site-wide Configuration
+    contents:
+        manageButtons:
+            kind: panel.element
+            label: Project Override
+            contents:
+                disableProjectMappings:
+                    tag: "button#structured-importer-disable-project.btn.btn-sm|type=button"
+                    content: Disable
+                deleteProjectMappings:
+                    tag: "button#structured-importer-delete-project.btn.btn-sm|type=button|style=margin-left:8px;"
+                    content: Delete
+                manageDescription:
+                    tag: div.description
+                    content: >
+                        <b>Disable</b> temporarily turns off this project's mappings; they are retained and can be
+                        restored by saving them again. <b>Delete</b> removes them. In either case, imports into this
+                        project fall back to the site-wide configuration. (Project owners only.)
+
+csvColumnMappingsProjectScript:
+    tag: script|src="~/scripts/xnat/plugin/structured-importer/csvColumnMappings.js"
+
+#end

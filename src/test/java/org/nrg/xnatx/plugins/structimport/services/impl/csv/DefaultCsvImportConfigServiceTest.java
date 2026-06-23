@@ -163,6 +163,62 @@ public class DefaultCsvImportConfigServiceTest {
     }
 
     @Test
+    public void disabledConfigIsTreatedAsAbsent() throws Exception {
+        final Configuration disabled = configurationWith(mapper.writeValueAsString(service.getDefaultColumnMappings()), Configuration.DISABLED_STRING);
+        when(configService.getConfig(TOOL, PATH, Scope.Project, PROJECT)).thenReturn(disabled);
+        assertThat(service.getColumnMappings(Scope.Project, PROJECT), is(nullValue()));
+    }
+
+    @Test
+    public void effectiveLookupFallsBackToSiteWhenProjectDisabled() throws Exception {
+        final Configuration disabledProject = configurationWith(mapper.writeValueAsString(service.getDefaultColumnMappings()), Configuration.DISABLED_STRING);
+        final List<CsvColumnMapping> siteMappings = Collections.singletonList(
+                CsvColumnMapping.builder().column("Scan ID").property("xnat:imageScanData/ID").build());
+        final Configuration siteConfig = configurationWith(mapper.writeValueAsString(siteMappings));
+        when(configService.getConfig(TOOL, PATH, Scope.Project, PROJECT)).thenReturn(disabledProject);
+        when(configService.getConfig(TOOL, PATH, Scope.Site, null)).thenReturn(siteConfig);
+
+        assertThat(service.getColumnMappings(user, PROJECT), equalTo(siteMappings));
+    }
+
+    @Test
+    public void enabledStatusIsHonoredAsPresent() throws Exception {
+        final List<CsvColumnMapping> mappings = Collections.singletonList(
+                CsvColumnMapping.builder().column("Scan ID").property("xnat:imageScanData/ID").build());
+        final Configuration enabled = configurationWith(mapper.writeValueAsString(mappings), Configuration.ENABLED_STRING);
+        when(configService.getConfig(TOOL, PATH, Scope.Project, PROJECT)).thenReturn(enabled);
+        assertThat(service.getColumnMappings(Scope.Project, PROJECT), equalTo(mappings));
+    }
+
+    @Test
+    public void disableColumnMappingsDelegatesToConfigService() throws Exception {
+        service.disableColumnMappings(user, Scope.Project, PROJECT);
+        verify(configService).disable(eq(USER), anyString(), eq(TOOL), eq(PATH), eq(Scope.Project), eq(PROJECT));
+    }
+
+    @Test(expected = RuntimeException.class)
+    public void disableColumnMappingsWrapsConfigServiceFailure() throws Exception {
+        org.mockito.Mockito.doThrow(new org.nrg.config.exceptions.ConfigServiceException("boom"))
+                           .when(configService)
+                           .disable(anyString(), anyString(), eq(TOOL), eq(PATH), eq(Scope.Project), eq(PROJECT));
+        service.disableColumnMappings(user, Scope.Project, PROJECT);
+    }
+
+    @Test
+    public void deleteColumnMappingsClearsContentsViaConfigService() throws Exception {
+        service.deleteColumnMappings(user, Scope.Project, PROJECT);
+        verify(configService).replaceConfig(eq(USER), anyString(), eq(TOOL), eq(PATH), eq(""), eq(Scope.Project), eq(PROJECT));
+    }
+
+    @Test(expected = RuntimeException.class)
+    public void deleteColumnMappingsWrapsConfigServiceFailure() throws Exception {
+        org.mockito.Mockito.doThrow(new org.nrg.config.exceptions.ConfigServiceException("boom"))
+                           .when(configService)
+                           .replaceConfig(anyString(), anyString(), eq(TOOL), eq(PATH), eq(""), eq(Scope.Project), eq(PROJECT));
+        service.deleteColumnMappings(user, Scope.Project, PROJECT);
+    }
+
+    @Test
     public void defaultMappingsContainExpectedColumnsAndPathLocator() {
         final List<CsvColumnMapping> defaults = service.getDefaultColumnMappings();
         assertThat(findColumnFor(defaults, CsvImportConfigService.PROP_SCAN_ID), equalTo("Scan ID"));
@@ -192,10 +248,15 @@ public class DefaultCsvImportConfigServiceTest {
     }
 
     private static Configuration configurationWith(final String contents) {
+        return configurationWith(contents, null);
+    }
+
+    private static Configuration configurationWith(final String contents, final String status) {
         final Configuration     config = mock(Configuration.class);
         final ConfigurationData data   = mock(ConfigurationData.class);
         when(data.getContents()).thenReturn(contents);
         when(config.getConfigData()).thenReturn(data);
+        when(config.getStatus()).thenReturn(status);
         return config;
     }
 }

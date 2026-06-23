@@ -81,6 +81,34 @@ public interface CsvImportConfigService extends NrgService {
     List<CsvColumnMapping> createOrUpdateColumnMappings(UserI user, Scope scope, String entityId, List<CsvColumnMapping> mappings);
 
     /**
+     * Disables the column mappings configured at the given scope, if any. A
+     * disabled configuration is retained (and can be restored by storing
+     * mappings again) but is treated as absent when resolving the effective
+     * mappings, so the next-broader scope applies. Disabling a project-level
+     * configuration therefore causes imports into that project to fall back to
+     * the site-wide configuration.
+     *
+     * @param user     the user making the change
+     * @param scope    {@link Scope#Site} or {@link Scope#Project}
+     * @param entityId {@code null} for site, the project ID for project scope
+     */
+    void disableColumnMappings(UserI user, Scope scope, String entityId);
+
+    /**
+     * Deletes the column mappings configured at the given scope by clearing
+     * their contents, so the next-broader scope applies. Unlike
+     * {@link #disableColumnMappings(UserI, Scope, String) disabling}, the
+     * previous contents are not retained. Deleting a project-level configuration
+     * causes imports into that project to fall back to the site-wide
+     * configuration.
+     *
+     * @param user     the user making the change
+     * @param scope    {@link Scope#Site} or {@link Scope#Project}
+     * @param entityId {@code null} for site, the project ID for project scope
+     */
+    void deleteColumnMappings(UserI user, Scope scope, String entityId);
+
+    /**
      * @return the built-in default site-wide column mappings.
      */
     List<CsvColumnMapping> getDefaultColumnMappings();

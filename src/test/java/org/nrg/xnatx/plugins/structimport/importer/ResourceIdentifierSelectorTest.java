@@ -1,8 +1,6 @@
 package org.nrg.xnatx.plugins.structimport.importer;
 
 import org.junit.Test;
-import org.nrg.xnatx.plugins.structimport.services.impl.csv.CsvBasedResourceIdentifierService;
-import org.nrg.xnatx.plugins.structimport.services.impl.simple.SimpleResourceIdentifierService;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -19,7 +17,7 @@ public class ResourceIdentifierSelectorTest {
     public void explicitResourceIdentifierParameterWins() {
         final Map<String, Object> parameters = new HashMap<>();
         parameters.put(ResourceIdentifierSelector.PARAM_RESOURCE_IDENTIFIER, "someCustomService");
-        parameters.put(TOGGLE_PARAM, "simple");
+        parameters.put(ResourceIdentifierSelector.PARAM_TOGGLE_SESSION_LABELING, "simple");
 
         assertThat(ResourceIdentifierSelector.select(parameters), equalTo("someCustomService"));
     }
@@ -30,24 +28,24 @@ public class ResourceIdentifierSelectorTest {
         parameters.put(ResourceIdentifierSelector.PARAM_RESOURCE_IDENTIFIER, "   ");
 
         assertThat(ResourceIdentifierSelector.select(parameters),
-                   equalTo(CsvBasedResourceIdentifierService.class.getSimpleName()));
+                   equalTo(ResourceIdentifierSelector.CSV_IDENTIFIER_SERVICE));
     }
 
     @Test
     public void noParametersDefaultsToCsvService() {
         assertThat(ResourceIdentifierSelector.select(Collections.emptyMap()),
-                   equalTo(CsvBasedResourceIdentifierService.class.getSimpleName()));
+                   equalTo(ResourceIdentifierSelector.CSV_IDENTIFIER_SERVICE));
     }
 
     @Test
     public void derivedToggleSelectsCsvService() {
-        assertThat(ResourceIdentifierSelector.select(Collections.singletonMap(TOGGLE_PARAM, (Object) "derived")),
-                   equalTo(CsvBasedResourceIdentifierService.class.getSimpleName()));
+        assertThat(ResourceIdentifierSelector.select(Collections.singletonMap(TOGGLE_PARAM, ResourceIdentifierSelector.DERIVED_SESSION_LABELING)),
+                   equalTo(ResourceIdentifierSelector.CSV_IDENTIFIER_SERVICE));
     }
 
     @Test
     public void nonDerivedToggleSelectsSimpleService() {
-        assertThat(ResourceIdentifierSelector.select(Collections.singletonMap(TOGGLE_PARAM, (Object) "manual")),
-                   equalTo(SimpleResourceIdentifierService.class.getSimpleName()));
+        assertThat(ResourceIdentifierSelector.select(Collections.singletonMap(TOGGLE_PARAM, ResourceIdentifierSelector.MANUAL_SESSION_LABELING)),
+                   equalTo(ResourceIdentifierSelector.SIMPLE_IDENTIFIER_SERVICE));
     }
 }
