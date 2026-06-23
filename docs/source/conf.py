@@ -20,6 +20,10 @@ extensions = [
     'sphinx.ext.intersphinx',
 ]
 
+# Prefix autosection labels with the document name so identically-named
+# sections in different pages (e.g. "Archive layout") don't collide.
+autosectionlabel_prefix_document = True
+
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
     'sphinx': ('https://www.sphinx-doc.org/en/master/', None),
