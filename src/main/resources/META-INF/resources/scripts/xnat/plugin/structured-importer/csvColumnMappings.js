@@ -1,14 +1,14 @@
 /*!
  * Structured Importer plugin — CSV column mappings administration UI.
  *
- * Renders a table-based editor into the site and project "CSV Column Mappings"
- * Spawner panels. The table is the source of truth: every edit is serialized to
- * a JSON array in a hidden input named "columnMappings", which the panel's
- * built-in Save button posts to the structured importer XAPI (the same wire
- * format the old JSON textarea used). A collapsible read-only preview shows the
- * generated JSON; serializeMappings/deserializeMappings are symmetric so an
- * editable-JSON mode can be added later. For projects, this script also handles
- * the Disable and Delete actions that revert to the site-wide configuration.
+ * Renders a mappings editor into the site and project "CSV Column Mappings"
+ * Spawner panels, with two switchable views: a table editor and a raw-JSON
+ * editor. Either way the configuration ends up as a JSON array in a hidden
+ * input named "columnMappings", which the panel's built-in Save button posts
+ * to the structured importer XAPI (the same wire format the old JSON textarea
+ * used). serializeMappings/deserializeMappings are the symmetric bridge
+ * between the two views. For projects, this script also handles the Disable
+ * and Delete actions that revert to the site-wide configuration.
  */
 
 var XNAT = getObject(XNAT || {});
@@ -107,6 +107,9 @@ var XNAT = getObject(XNAT || {});
             '<p>For example, <code>xnat:mrScanData/parameters/tr</code> sets the repetition time on MR scans. ' +
             'Values for session- and subject-level properties must agree across all manifest rows for the same ' +
             'session or subject.</p>' +
+            '<p>Mappings can be edited in the table or directly as JSON &ndash; use the <b>Edit as Table</b> / ' +
+            '<b>Edit as JSON</b> buttons to switch views. In the JSON view, the configuration is saved exactly ' +
+            'as entered.</p>' +
             '<p style="margin-bottom:4px;"><b>Sample configuration (the built-in default):</b></p>' +
             '<div style="border:1px solid #ddd;border-radius:3px;background:#f7f7f7;max-height:260px;overflow:auto;">' +
             '<pre class="structured-importer-sample-json" style="margin:0;padding:8px;font-size:11px;">' + sampleJson() + '</pre>' +
@@ -331,16 +334,20 @@ var XNAT = getObject(XNAT || {});
     };
 
     /**
-     * The table editor bound to one panel (site or project). The table is the
-     * source of truth; sync() regenerates the hidden input and the preview.
+     * The mappings editor bound to one panel (site or project). It has two
+     * modes: a table view and a raw-JSON view, switchable at any time. In table
+     * mode the rows are the source of truth and every edit is serialized into
+     * the hidden columnMappings input; in JSON mode the textarea is the source
+     * of truth and its raw text is copied into the hidden input as typed.
+     * Switching JSON -> table requires the JSON to parse as an array.
      */
     function MappingsEditor(opts) {
-        this.tableContainer   = document.getElementById(opts.tableContainerId);
-        this.hiddenInput      = document.getElementById(opts.hiddenInputId);
-        this.previewContainer = document.getElementById(opts.previewContainerId);
-        this.emptyHint        = opts.emptyHint || '';
-        this.rows             = [];
-        this.previewOpen      = false;
+        this.tableContainer = document.getElementById(opts.tableContainerId);
+        this.hiddenInput    = document.getElementById(opts.hiddenInputId);
+        this.jsonContainer  = document.getElementById(opts.jsonContainerId);
+        this.emptyHint      = opts.emptyHint || '';
+        this.rows           = [];
+        this.mode           = 'table';
         this.build();
     }
 
@@ -351,6 +358,14 @@ var XNAT = getObject(XNAT || {});
             return;
         }
         container.innerHTML = '';
+
+        var modeBar = document.createElement('div');
+        modeBar.style.cssText = 'margin-bottom:8px;';
+        this.tableModeButton = buildModeButton('Edit as Table', function() { editor.setMode('table'); });
+        this.jsonModeButton  = buildModeButton('Edit as JSON', function() { editor.setMode('json'); });
+        modeBar.appendChild(this.tableModeButton);
+        modeBar.appendChild(this.jsonModeButton);
+        container.appendChild(modeBar);
 
         this.warningsEl = document.createElement('div');
         this.warningsEl.className = 'structured-importer-mapping-warnings';
@@ -375,12 +390,12 @@ var XNAT = getObject(XNAT || {});
         this.tbody = document.createElement('tbody');
         this.table.appendChild(this.tbody);
 
-        var addButton = document.createElement('button');
-        addButton.type = 'button';
-        addButton.className = 'btn btn-sm';
-        addButton.style.marginTop = '8px';
-        addButton.textContent = 'Add Mapping';
-        addButton.addEventListener('click', function(e) {
+        this.addButton = document.createElement('button');
+        this.addButton.type = 'button';
+        this.addButton.className = 'btn btn-sm';
+        this.addButton.style.marginTop = '8px';
+        this.addButton.textContent = 'Add Mapping';
+        this.addButton.addEventListener('click', function(e) {
             e.preventDefault();
             editor.rows.push({ column: '', property: '', required: true, validation: '' });
             editor.render();
@@ -393,40 +408,127 @@ var XNAT = getObject(XNAT || {});
         container.appendChild(this.warningsEl);
         container.appendChild(this.emptyEl);
         container.appendChild(this.table);
-        container.appendChild(addButton);
+        container.appendChild(this.addButton);
 
-        this.buildPreview();
+        this.buildJsonEditor();
+        this.updateModeButtons();
     };
 
-    MappingsEditor.prototype.buildPreview = function() {
+    function buildModeButton(label, action) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-sm';
+        button.style.marginRight = '6px';
+        button.textContent = label;
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            action();
+        });
+        return button;
+    }
+
+    MappingsEditor.prototype.buildJsonEditor = function() {
         var editor = this;
-        var container = this.previewContainer;
+        var container = this.jsonContainer;
         if (!container) {
             return;
         }
         container.innerHTML = '';
-        this.previewToggle = document.createElement('a');
-        this.previewToggle.href = '#!';
-        this.previewToggle.style.cssText = 'display:inline-block;margin-top:10px;font-size:12px;';
-        this.previewPre = document.createElement('pre');
-        this.previewPre.style.cssText = 'display:none;margin-top:6px;padding:8px;background:#f7f7f7;border:1px solid #ddd;border-radius:3px;max-height:320px;overflow:auto;font-size:11px;';
-        this.previewToggle.addEventListener('click', function(e) {
-            e.preventDefault();
-            editor.previewOpen = !editor.previewOpen;
-            editor.updatePreview();
+        container.style.display = 'none';
+
+        this.jsonErrorEl = document.createElement('div');
+        this.jsonErrorEl.style.cssText = 'display:none;margin-bottom:8px;padding:6px 10px;border:1px solid #c66;background:#fbeeee;border-radius:3px;';
+
+        // No "name" attribute: only the hidden columnMappings input may be
+        // serialized by the surrounding Spawner panel.form on Save.
+        this.jsonTextarea = document.createElement('textarea');
+        this.jsonTextarea.rows = 20;
+        this.jsonTextarea.spellcheck = false;
+        this.jsonTextarea.style.cssText = 'width:100%;font-family:monospace;font-size:12px;box-sizing:border-box;';
+        this.jsonTextarea.addEventListener('input', function() {
+            editor.syncFromJson();
         });
-        container.appendChild(this.previewToggle);
-        container.appendChild(this.previewPre);
-        this.updatePreview();
+
+        var jsonHint = document.createElement('div');
+        jsonHint.className = 'description';
+        jsonHint.style.cssText = 'margin-top:4px;';
+        jsonHint.textContent = 'The configuration as a JSON array, saved exactly as entered. Switch back to the table view to edit the parsed mappings.';
+
+        container.appendChild(this.jsonErrorEl);
+        container.appendChild(this.jsonTextarea);
+        container.appendChild(jsonHint);
     };
 
-    MappingsEditor.prototype.updatePreview = function() {
-        if (!this.previewToggle) {
+    /**
+     * Switches between the table and JSON views. Entering JSON mode serializes
+     * the current rows into the textarea; returning to table mode requires the
+     * JSON to parse (otherwise an error is shown and the editor stays in JSON
+     * mode so nothing is lost).
+     */
+    MappingsEditor.prototype.setMode = function(mode) {
+        if (mode === this.mode) {
             return;
         }
-        this.previewToggle.textContent = (this.previewOpen ? '▾ Hide' : '▸ Show') + ' generated JSON';
-        this.previewPre.style.display = this.previewOpen ? 'block' : 'none';
-        this.previewPre.textContent = this.hiddenInput ? this.hiddenInput.value : '';
+        if (mode === 'json') {
+            this.jsonTextarea.value = this.hiddenInput ? this.hiddenInput.value : csv.serializeMappings(this.rows);
+            this.mode = 'json';
+            this.syncFromJson();
+        } else {
+            var rows = csv.deserializeMappings(this.jsonTextarea.value);
+            if (rows === null) {
+                this.showJsonError('The text is not a valid JSON array of mappings; fix it before switching to the table view. (The switch was blocked so nothing is lost.)');
+                return;
+            }
+            this.mode = 'table';
+            this.setMappings(rows);
+        }
+        this.updateModeButtons();
+    };
+
+    MappingsEditor.prototype.updateModeButtons = function() {
+        var isTable = this.mode === 'table';
+        this.tableModeButton.disabled = isTable;
+        this.jsonModeButton.disabled  = !isTable;
+        this.table.style.display     = isTable ? '' : 'none';
+        this.addButton.style.display = isTable ? '' : 'none';
+        this.emptyEl.style.display   = isTable && !this.rows.length ? 'block' : 'none';
+        if (!isTable) {
+            this.warningsEl.style.display = 'none';
+        }
+        if (this.jsonContainer) {
+            this.jsonContainer.style.display = isTable ? 'none' : '';
+        }
+    };
+
+    /**
+     * JSON-mode counterpart of sync(): copies the textarea's raw text into the
+     * hidden input (what you type is what Save posts) and refreshes the parse
+     * error / soft warnings.
+     */
+    MappingsEditor.prototype.syncFromJson = function() {
+        var text = this.jsonTextarea.value;
+        if (this.hiddenInput) {
+            this.hiddenInput.value = text;
+            $(this.hiddenInput).trigger('change');
+        }
+        var rows = csv.deserializeMappings(text);
+        if (rows === null) {
+            this.showJsonError('This is not a valid JSON array of mappings; saving it will be rejected.');
+        } else {
+            var warnings = csv.computeWarnings(rows);
+            if (warnings.length) {
+                this.showJsonError(warnings.map(function(warning) {
+                    return '⚠ ' + warning;
+                }).join('\n'));
+            } else {
+                this.jsonErrorEl.style.display = 'none';
+            }
+        }
+    };
+
+    MappingsEditor.prototype.showJsonError = function(message) {
+        this.jsonErrorEl.innerHTML = message.replace(/</g, '&lt;').replace(/\n/g, '<br>');
+        this.jsonErrorEl.style.display = 'block';
     };
 
     MappingsEditor.prototype.setMappings = function(rows) {
@@ -434,17 +536,15 @@ var XNAT = getObject(XNAT || {});
         this.render();
     };
 
-    /** Shown when the stored configuration isn't a parseable JSON array. */
+    /**
+     * Shown when the stored configuration isn't a parseable JSON array: open
+     * directly in JSON mode with the raw text so it can be repaired in place.
+     */
     MappingsEditor.prototype.showRawFallback = function(raw) {
-        if (this.hiddenInput) {
-            this.hiddenInput.value = raw || '';
-        }
-        this.tbody.innerHTML = '';
-        this.table.style.display = 'none';
-        this.emptyEl.style.display = 'block';
-        this.emptyEl.textContent = 'The stored configuration could not be parsed as a JSON array, so it cannot be edited here. The raw value is shown in the JSON preview below; use Delete (project) or the REST API to replace it.';
-        this.previewOpen = true;
-        this.updatePreview();
+        this.mode = 'json';
+        this.jsonTextarea.value = raw || '';
+        this.syncFromJson();
+        this.updateModeButtons();
     };
 
     MappingsEditor.prototype.render = function() {
@@ -606,10 +706,10 @@ var XNAT = getObject(XNAT || {});
 
     csv.loadSite = function() {
         initEditor('site', {
-            tableContainerId:   SITE_INPUT + '-table',
-            hiddenInputId:      SITE_INPUT,
-            previewContainerId: SITE_INPUT + '-preview',
-            emptyHint:          'No mappings are configured. Click "Add Mapping" to begin.'
+            tableContainerId: SITE_INPUT + '-table',
+            hiddenInputId:    SITE_INPUT,
+            jsonContainerId:  SITE_INPUT + '-json',
+            emptyHint:        'No mappings are configured. Click "Add Mapping" to begin.'
         }, siteUrl());
     };
 
@@ -620,10 +720,10 @@ var XNAT = getObject(XNAT || {});
             return;
         }
         initEditor('project', {
-            tableContainerId:   PROJECT_INPUT + '-table',
-            hiddenInputId:      PROJECT_INPUT,
-            previewContainerId: PROJECT_INPUT + '-preview',
-            emptyHint:          'No project override is configured; the site-wide mappings apply. Add mappings and save to create a project-level override.'
+            tableContainerId: PROJECT_INPUT + '-table',
+            hiddenInputId:    PROJECT_INPUT,
+            jsonContainerId:  PROJECT_INPUT + '-json',
+            emptyHint:        'No project override is configured; the site-wide mappings apply. Add mappings and save to create a project-level override.'
         }, projectUrl(projectId));
         bindProjectButtons();
     };

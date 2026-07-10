@@ -40,8 +40,8 @@ csvColumnMappingsPanel:
                 <i class="fa fa-question-circle" style="color: #084fab;"></i> About CSV column mappings</a>
         columnMappingsTable:
             tag: div#structured-importer-site-csv-table.structured-importer-mappings-table
-        columnMappingsPreview:
-            tag: div#structured-importer-site-csv-preview.structured-importer-mappings-preview
+        columnMappingsJson:
+            tag: div#structured-importer-site-csv-json.structured-importer-mappings-json
         columnMappings:
             tag: input#structured-importer-site-csv|type=hidden|name=columnMappings
         columnMappingsDescription:
@@ -52,6 +52,6 @@ csvColumnMappingsPanel:
 
 # The ?v= query parameter busts browser caches; bump it whenever the script changes.
 csvColumnMappingsScript:
-    tag: script|src="~/scripts/xnat/plugin/structured-importer/csvColumnMappings.js?v=1.1.0"
+    tag: script|src="~/scripts/xnat/plugin/structured-importer/csvColumnMappings.js?v=1.2.0"
 
 # end

@@ -31,9 +31,12 @@ table; each row defines:
 * **Required** — whether the column must be present in the manifest and have a value.
 * **Validation** — an optional regular expression that each non-blank value must match.
 
-The table generates a JSON configuration in the background; the **Show generated JSON** link
-displays it. Problems such as duplicate columns or a missing path column are flagged as
-warnings while editing, and the configuration is validated again when saved and at import time.
+The table generates a JSON configuration in the background. The **Edit as JSON** button switches
+to a raw-JSON view where the configuration can be edited directly and is saved exactly as entered;
+**Edit as Table** switches back (the JSON must parse as an array to return to the table, so
+malformed edits are never silently lost). Problems such as duplicate columns or a missing path
+column are flagged as warnings in both views, and the configuration is validated again when
+saved and at import time.
 
 The **About CSV column mappings** link above the table opens a dialog describing the mapping
 fields and the supported custom property roots. The dialog includes a sample configuration

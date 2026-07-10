@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - The site and project **CSV Column Mappings** settings are now edited in a table-based GUI that
-  generates the stored JSON configuration in the background, with a collapsible read-only preview
-  of the generated JSON. The REST API and stored format are unchanged.
+  generates the stored JSON configuration in the background, with an **Edit as JSON** mode for
+  editing the configuration directly (switching back to the table requires the JSON to parse, so
+  malformed edits are never silently lost). The REST API and stored format are unchanged.
 - Column mappings may now target **arbitrary XNAT property paths** (e.g.
   `xnat:mrScanData/parameters/tr`) in addition to the built-in properties. Paths rooted at
   `xnat:imageScanData`/`xnat:imageSessionData` apply to scans/sessions of any modality;
