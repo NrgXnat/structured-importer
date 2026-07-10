@@ -69,7 +69,8 @@ csvColumnMappingsProjectManage:
                         restored by saving them again. <b>Delete</b> removes them. In either case, imports into this
                         project fall back to the site-wide configuration. (Project owners only.)
 
+# The ?v= query parameter busts browser caches; bump it whenever the script changes.
 csvColumnMappingsProjectScript:
-    tag: script|src="~/scripts/xnat/plugin/structured-importer/csvColumnMappings.js"
+    tag: script|src="~/scripts/xnat/plugin/structured-importer/csvColumnMappings.js?v=1.1.0"
 
 #end

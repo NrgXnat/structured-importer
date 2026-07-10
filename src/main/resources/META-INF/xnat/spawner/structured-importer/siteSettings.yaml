@@ -50,7 +50,8 @@ csvColumnMappingsPanel:
                 This configuration applies to every project that does not define its own project-level mappings.
                 Changes take effect when you click Save.
 
+# The ?v= query parameter busts browser caches; bump it whenever the script changes.
 csvColumnMappingsScript:
-    tag: script|src="~/scripts/xnat/plugin/structured-importer/csvColumnMappings.js"
+    tag: script|src="~/scripts/xnat/plugin/structured-importer/csvColumnMappings.js?v=1.1.0"
 
 # end
