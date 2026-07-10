@@ -7,6 +7,7 @@ import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.lang3.StringUtils;
 import org.nrg.xft.security.UserI;
 import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
+import org.nrg.xnatx.plugins.structimport.models.PropertyTargets;
 import org.nrg.xnatx.plugins.structimport.services.CsvImportConfigService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -127,12 +129,21 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
             final String pathValue  = required(record, context.getPathColumn());
             final Path   sourcePath = resolveAndValidatePath(root, pathValue, record.getRecordNumber());
 
+            final Map<String, String> customProperties = new LinkedHashMap<>();
+            for (final Map.Entry<String, String> custom : context.getCustomColumnsByProperty().entrySet()) {
+                final String value = valueOrNull(record, custom.getValue(), header);
+                if (value != null) {
+                    customProperties.put(custom.getKey(), value);
+                }
+            }
+
             final ScanResource resource = new ScanResource(subjectLabel, sessionLabel, scanId, modality, name,
-                                                           seriesDescription, startDate, startTime, subjectWeight);
+                                                           seriesDescription, startDate, startTime, subjectWeight,
+                                                           customProperties);
             resources.computeIfAbsent(resource, k -> new ArrayList<>()).add(sourcePath);
         }
 
-        validateConsistency(resources.keySet(), context.column(CsvImportConfigService.PROP_SUBJECT_WEIGHT));
+        validateConsistency(resources.keySet(), context);
         return resources;
     }
 
@@ -210,23 +221,43 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
     }
 
     /**
-     * Across all rows that share a subject, the {@code subjectWeight} (and any
-     * other per-subject fields we add later) must agree. Per-scan fields are
-     * already keyed into the {@code ScanResource}, so the map-key equality
-     * enforces agreement at aggregation time — but distinct keys whose
-     * subject-level fields disagree indicate a manifest error.
+     * Across all rows that share a subject, subject-level values (weight and any
+     * SUBJECT-target custom properties) must agree; session-level custom
+     * properties must likewise agree across all rows sharing a subject and
+     * session. Per-scan fields are already keyed into the {@code ScanResource},
+     * so the map-key equality enforces agreement at aggregation time — but
+     * distinct keys whose subject- or session-level fields disagree indicate a
+     * manifest error.
      */
-    private static void validateConsistency(final Iterable<ScanResource> resources, final String weightColumn) {
-        final Map<String, Double> weightsBySubject = new LinkedHashMap<>();
+    private static void validateConsistency(final Iterable<ScanResource> resources, final MappingContext context) {
+        final String                    weightColumn     = context.column(CsvImportConfigService.PROP_SUBJECT_WEIGHT);
+        final Map<String, Double>       weightsBySubject = new LinkedHashMap<>();
+        final Map<List<String>, String> customByTarget   = new LinkedHashMap<>();
         for (final ScanResource resource : resources) {
             final String subject = resource.getSubjectLabel();
             final Double weight  = resource.getSubjectWeight();
-            if (weight == null) {
-                continue;
+            if (weight != null) {
+                final Double existing = weightsBySubject.putIfAbsent(subject, weight);
+                if (existing != null && !Objects.equals(existing, weight)) {
+                    throw new IllegalStateException("CSV manifest has inconsistent " + StringUtils.defaultIfBlank(weightColumn, "subject weight") + " values for subject \"" + subject + "\": " + existing + " vs " + weight);
+                }
             }
-            final Double existing = weightsBySubject.putIfAbsent(subject, weight);
-            if (existing != null && !Objects.equals(existing, weight)) {
-                throw new IllegalStateException("CSV manifest has inconsistent " + StringUtils.defaultIfBlank(weightColumn, "subject weight") + " values for subject \"" + subject + "\": " + existing + " vs " + weight);
+            for (final Map.Entry<String, String> entry : resource.getCustomProperties().entrySet()) {
+                final String                     property = entry.getKey();
+                final PropertyTargets.TargetType target   = PropertyTargets.targetOf(property);
+                if (target == PropertyTargets.TargetType.SCAN) {
+                    continue;
+                }
+                final List<String> key = target == PropertyTargets.TargetType.SUBJECT
+                                         ? Arrays.asList(property, subject)
+                                         : Arrays.asList(property, subject, resource.getSessionLabel());
+                final String existing = customByTarget.putIfAbsent(key, entry.getValue());
+                if (existing != null && !existing.equals(entry.getValue())) {
+                    final String column = context.getCustomColumnsByProperty().get(property);
+                    throw new IllegalStateException("CSV manifest has inconsistent values in column \"" + column + "\" (" + property + ") for subject \"" + subject + "\""
+                                                    + (target == PropertyTargets.TargetType.SESSION ? " session \"" + resource.getSessionLabel() + "\"" : "")
+                                                    + ": \"" + existing + "\" vs \"" + entry.getValue() + "\"");
+                }
             }
         }
     }
@@ -239,7 +270,8 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
     private static final class MappingContext {
 
         private final List<CsvColumnMapping> mappings;
-        private final Map<String, String>    columnByProperty = new LinkedHashMap<>();
+        private final Map<String, String>    columnByProperty       = new LinkedHashMap<>();
+        private final Map<String, String>    customColumnByProperty = new LinkedHashMap<>();
         private final Map<String, Pattern>           patternByColumn  = new LinkedHashMap<>();
         private final String                         pathColumn;
 
@@ -249,7 +281,8 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
             }
             this.mappings = mappings;
 
-            String resolvedPathColumn = null;
+            final Set<String> seenProperties     = new LinkedHashSet<>();
+            String            resolvedPathColumn = null;
             for (final CsvColumnMapping mapping : mappings) {
                 final String column = mapping.getColumn();
                 if (StringUtils.isBlank(column)) {
@@ -261,7 +294,22 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
                     }
                     resolvedPathColumn = column;
                 } else {
-                    columnByProperty.put(mapping.getProperty().toLowerCase(Locale.ROOT), column);
+                    final String property   = mapping.getProperty();
+                    final String normalized = property.toLowerCase(Locale.ROOT);
+                    if (!seenProperties.add(normalized)) {
+                        throw new IllegalStateException("CSV import configuration maps the property \"" + property + "\" from more than one column");
+                    }
+                    if (PropertyTargets.isBuiltIn(property)) {
+                        columnByProperty.put(normalized, column);
+                    } else {
+                        try {
+                            PropertyTargets.targetOf(property);
+                        } catch (IllegalArgumentException e) {
+                            throw new IllegalStateException("CSV import configuration column \"" + column + "\": " + e.getMessage(), e);
+                        }
+                        // XFT paths are case-sensitive, so custom properties keep their original case
+                        customColumnByProperty.put(property, column);
+                    }
                 }
                 if (StringUtils.isNotBlank(mapping.getValidation())) {
                     try {
@@ -279,6 +327,10 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
 
         private String getPathColumn() {
             return pathColumn;
+        }
+
+        private Map<String, String> getCustomColumnsByProperty() {
+            return customColumnByProperty;
         }
 
         private String column(final String property) {

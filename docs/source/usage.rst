@@ -43,17 +43,22 @@ Importing the archive
    or ``CT``).
 #. Choose how session structure is determined:
 
-   * **Extract From Structure (Default)** uses the CSV manifest service.
-   * **Customize** uses the directory structure service; with this option you
-     must provide the **subject** and **session** labels on the form, since the
-     folder layout does not supply them.
+   * **Extract From Structure (Default)** uses the CSV manifest service; the
+     subject and session labels come from the manifest.
+   * **Customize** lets you provide the **subject label** and **session label**
+     on the form. Both values are required — the upload cannot begin until they
+     are filled in. If the archive contains a CSV manifest, it is still used
+     for scan metadata, but any subject or session labels in the manifest are
+     **ignored** in favor of the values you enter. Archives without a manifest
+     fall back to the directory structure service. Because a single pair of
+     labels replaces whatever the manifest says, the archive must contain only
+     a **single session**: imports whose manifest contains multiple subjects
+     or sessions are rejected with an error.
 
-#. Select the archive file and start the upload.
-
-When the manifest (or your upload entries) supplies the subject and session,
-leave the corresponding fields on the form blank. Specifying the same value both
-on the form and in the manifest is treated as a conflict and rejected; provide
-each value in only one place.
+#. Select the archive file and start the upload. With the Structured-Zip
+   importer, the **Destination** is always **Archive** (the controls are
+   locked); structured imports write directly to the archive and never pass
+   through the prearchive.
 
 Results
 -------

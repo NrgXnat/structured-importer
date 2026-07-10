@@ -44,8 +44,18 @@ public class ResourceIdentifierSelectorTest {
     }
 
     @Test
-    public void nonDerivedToggleSelectsSimpleService() {
+    public void nonDerivedToggleSelectsManifestAwareManualService() {
         assertThat(ResourceIdentifierSelector.select(Collections.singletonMap(TOGGLE_PARAM, ResourceIdentifierSelector.MANUAL_SESSION_LABELING)),
+                   equalTo(ResourceIdentifierSelector.MANUAL_IDENTIFIER_SERVICE));
+    }
+
+    @Test
+    public void simpleServiceRemainsSelectableByExplicitParameter() {
+        final Map<String, Object> parameters = new HashMap<>();
+        parameters.put(ResourceIdentifierSelector.PARAM_RESOURCE_IDENTIFIER, ResourceIdentifierSelector.SIMPLE_IDENTIFIER_SERVICE);
+        parameters.put(ResourceIdentifierSelector.PARAM_TOGGLE_SESSION_LABELING, ResourceIdentifierSelector.MANUAL_SESSION_LABELING);
+
+        assertThat(ResourceIdentifierSelector.select(parameters),
                    equalTo(ResourceIdentifierSelector.SIMPLE_IDENTIFIER_SERVICE));
     }
 }

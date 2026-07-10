@@ -33,6 +33,7 @@ import org.nrg.xnat.restlet.actions.importer.ImporterHandlerA;
 import org.nrg.xnat.restlet.util.FileWriterWrapperI;
 import org.nrg.xnat.restlet.util.XNATRestConstants;
 import org.nrg.xnat.services.archive.CatalogService;
+import org.nrg.xnatx.plugins.structimport.models.PropertyTargets;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService.ScanResource;
 
@@ -123,6 +124,8 @@ public class StructuredImporter extends ImporterHandlerA {
             final Map<ScanResource, List<Path>> resources = resourceIdentifierService.extractResource(getWorkingDirectory(), getUser(), getProjectId());
             processing("Identified " + resources.size() + " scan resource(s) in " + getWorkingDirectory());
 
+            CustomLabelingValidator.validate(resources.keySet(), getSubjectLabel(), getSessionLabel());
+
             final Map<SessionContext, Map<ScanResource, List<Path>>> grouped = groupBySession(resources);
             processing("Grouped resources into " + grouped.size() + " session(s)");
 
@@ -167,24 +170,9 @@ public class StructuredImporter extends ImporterHandlerA {
     }
 
     private SessionContext resolveSessionContext(final ScanResource resource) throws ClientException {
-        final String subject = resolveValue(PARAM_SUBJECT, getSubjectLabel(), resource.getSubjectLabel());
-        final String session = resolveValue(PARAM_SESSION, getSessionLabel(), resource.getSessionLabel());
+        final String subject = LabelResolver.resolve(PARAM_SUBJECT, getSubjectLabel(), resource.getSubjectLabel());
+        final String session = LabelResolver.resolve(PARAM_SESSION, getSessionLabel(), resource.getSessionLabel());
         return new SessionContext(subject, session);
-    }
-
-    private String resolveValue(final String fieldName, final String fromParameters, final String fromResource) throws ClientException {
-        final boolean hasParameter = StringUtils.isNotBlank(fromParameters);
-        final boolean hasResource  = StringUtils.isNotBlank(fromResource);
-        if (hasParameter && hasResource) {
-            throw new ClientException("Conflict for " + fieldName + ": upload parameter specifies \"" + fromParameters + "\" but the resource identifier specifies \"" + fromResource + "\". Specify the value in only one location.");
-        }
-        if (hasParameter) {
-            return fromParameters;
-        }
-        if (hasResource) {
-            return fromResource;
-        }
-        throw new ClientException("Required " + fieldName + " was not specified in upload parameters or by the resource identifier service");
     }
 
     private String createSession(final SessionContext context, final Map<ScanResource, List<Path>> resources) throws ClientException, ServerException {
@@ -199,6 +187,8 @@ public class StructuredImporter extends ImporterHandlerA {
             session.setSubjectId(subject.getId());
             session.setLabel(sessionLabel);
             session.setModality(getPrimaryModality());
+            CustomPropertyApplier.applyProperties(session, PropertyTargets.TargetType.SESSION,
+                                                  CustomPropertyApplier.collectProperties(resources.keySet(), PropertyTargets.TargetType.SESSION));
 
             SaveItemHelper.authorizedSave(session, getUser(), false, false, EventUtils.newEventInstance(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_FORM, "Created session " + sessionLabel + " for subject " + subjectLabel + " in project " + getProjectId()));
 
@@ -217,6 +207,7 @@ public class StructuredImporter extends ImporterHandlerA {
                 if (resource.getStartTime() != null) {
                     scan.setStarttime(java.sql.Time.valueOf(resource.getStartTime()));
                 }
+                CustomPropertyApplier.applyProperties(scan, PropertyTargets.TargetType.SCAN, resource.getCustomProperties());
                 SaveItemHelper.authorizedSave(scan, getUser(), false, false, EventUtils.newEventInstance(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_FORM, "Created scan " + scan.getId() + " on session " + sessionLabel + " in project " + getProjectId()));
                 log.info("Created scan {} for session {}", scan.getId(), session.getId());
 
@@ -231,6 +222,8 @@ public class StructuredImporter extends ImporterHandlerA {
                 log.info("Refreshing catalog at {} via URI {}", catalog.getUri(), resourceUri);
                 catalogService.refreshResourceCatalog(getUser(), resourceUri, CatalogService.Operation.All);
             }
+        } catch (ClientException e) {
+            throw e;
         } catch (Exception e) {
             throw new ClientException("An error occurred while trying to create session " + sessionLabel + " for subject " + subjectLabel + " in project " + getProjectId(), e);
         }
@@ -289,6 +282,8 @@ public class StructuredImporter extends ImporterHandlerA {
                 throw new ClientException("Unable to set weight on subject " + subjectLabel, e);
             }
         }
+        CustomPropertyApplier.applyProperties(created, PropertyTargets.TargetType.SUBJECT,
+                                              CustomPropertyApplier.collectProperties(resources, PropertyTargets.TargetType.SUBJECT));
         try {
             SaveItemHelper.authorizedSave(created, getUser(), false, true, EventUtils.newEventInstance(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_FORM, "Created subject " + subjectLabel + " in project " + getProjectId()));
         } catch (Exception e) {

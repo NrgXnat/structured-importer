@@ -79,6 +79,38 @@ The **Path** column is special: it locates content within the archive rather tha
 setting an XNAT property. Paths must be relative to the archive root, must not
 point outside it, and must exist in the archive.
 
+Custom properties
+-----------------
+
+Beyond the built-in properties above, columns can be mapped to **any XNAT property
+path** (see :doc:`administration`). A custom path is a supported root element
+followed by the path of the property within that data type — for example,
+``xnat:mrScanData/parameters/tr`` sets the repetition time on MR scans.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 45 35
+
+   * - Applies to
+     - Roots
+     - Notes
+   * - Scan
+     - ``xnat:imageScanData``; ``xnat:mrScanData``, ``xnat:petScanData``,
+       ``xnat:ctScanData``, ``xnat:srScanData``
+     - The generic root applies to scans of any modality; a modality-specific
+       root must match the scan's modality or the import fails.
+   * - Session
+     - ``xnat:imageSessionData``; ``xnat:mrSessionData``, ``xnat:petSessionData``,
+       ``xnat:ctSessionData``
+     - Values must agree across all rows of the same session.
+   * - Subject
+     - ``xnat:subjectData``
+     - Values must agree across all rows of the same subject, and apply only to
+       subjects the import creates (existing subjects are not modified).
+
+Custom scan properties participate in row aggregation: rows combine into the same
+scan resource only when all of their custom values agree.
+
 How rows become scans
 ---------------------
 
@@ -88,8 +120,9 @@ How rows become scans
   resource on scan ``1`` made up of two files.
 * **Multiple sessions and subjects.** Because every row carries its own subject
   and session, a single archive can populate several subjects and sessions at
-  once. When the manifest supplies the subject and session, leave the ``subject``
-  and ``session`` upload fields blank.
+  once. If custom subject and session labels are supplied with the upload
+  (**Customize** labeling), they override the manifest's labels; this is only
+  allowed for archives whose manifest contains a single subject and session.
 * **Default resource name.** If the Resource Name column is blank, ``NIFTI`` is
   used (as in the third example row).
 
@@ -103,7 +136,8 @@ error — including the offending row and column where applicable — when:
 * a value does not match the validation pattern configured for its column;
 * a date, time, or number cannot be parsed;
 * a path is absolute, escapes the archive root, or does not exist;
-* the same subject is given inconsistent subject-weight values across rows;
+* the same subject is given inconsistent subject-weight values across rows, or a
+  session- or subject-level custom property is given inconsistent values;
 * no CSV manifest, or more than one, is found at the archive root.
 
 When to use it

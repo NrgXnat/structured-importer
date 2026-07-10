@@ -31,7 +31,9 @@
                 document.getElementById("structured-custom-labeling").hidden = true;
                 document.getElementById("structured-subject-labeling").hidden = true;
                 document.getElementById("structured-session-labeling").hidden = true;
+                document.getElementById("structured-labeling-note").hidden = true;
                 document.getElementById("structured-primary-modality").hidden = true;
+                unlockDestination();
                 break;
             case "Structured-Zip":
                 document.getElementById("ignoreUnparsableTr").hidden = false;
@@ -41,7 +43,9 @@
                 document.getElementById("structured-custom-labeling").hidden = false;
                 document.getElementById("structured-subject-labeling").hidden = false;
                 document.getElementById("structured-session-labeling").hidden = false;
+                document.getElementById("structured-labeling-note").hidden = false;
                 document.getElementById("structured-primary-modality").hidden = false;
+                lockDestinationToArchive();
                 break;
             default:
                 document.getElementById("ignoreUnparsableTr").hidden = true;
@@ -51,9 +55,69 @@
                 document.getElementById("structured-custom-labeling").hidden = true;
                 document.getElementById("structured-subject-labeling").hidden = true;
                 document.getElementById("structured-session-labeling").hidden = true;
+                document.getElementById("structured-labeling-note").hidden = true;
                 document.getElementById("structured-primary-modality").hidden = true;
+                unlockDestination();
+        }
+        updateBeginUploadState();
+    }
+
+    // Structured imports always write directly to the archive, so the
+    // Destination choice is forced to Archive and locked while the structured
+    // handler is selected; the previous selection is restored on switch-away.
+    var savedPrearchiveCode = null;
+
+    function lockDestinationToArchive() {
+        var pc0 = document.getElementById("pc_0");
+        var pc2 = document.getElementById("pc_2");
+        if (!pc0 || !pc2) {
+            return;
+        }
+        if (savedPrearchiveCode === null) {
+            var checked = document.querySelector('input[name=prearchive_code]:checked');
+            savedPrearchiveCode = checked ? checked.id : 'pc_0';
+        }
+        pc2.checked = true;
+        evaluateDestination(pc2);
+        pc0.disabled = true;
+        pc2.disabled = true;
+        pc0.parentElement.title = pc2.parentElement.title = 'Structured imports are archived directly';
+    }
+
+    function unlockDestination() {
+        var pc0 = document.getElementById("pc_0");
+        var pc2 = document.getElementById("pc_2");
+        if (!pc0 || !pc2) {
+            return;
+        }
+        pc0.disabled = false;
+        pc2.disabled = false;
+        pc0.parentElement.title = pc2.parentElement.title = '';
+        if (savedPrearchiveCode !== null) {
+            var saved = document.getElementById(savedPrearchiveCode);
+            if (saved) {
+                saved.checked = true;
+                evaluateDestination(saved);
+            }
+            savedPrearchiveCode = null;
         }
     }
+
+    // With the structured handler and Customize labeling, the upload cannot
+    // begin until both the subject and session labels are filled in.
+    function updateBeginUploadState() {
+        var button        = document.getElementById('directButton');
+        var handlerSelect = document.getElementById('import-handler');
+        if (!button || !handlerSelect) {
+            return;
+        }
+        var manual  = $('input.toggleStructuredSessionLabeling[value=manual]').is(':checked');
+        var subject = $('#structured-subject-labeling input[name=subject]').val() || '';
+        var session = $('#structured-session-labeling input[name=session]').val() || '';
+        button.disabled = handlerSelect.value === 'Structured-Zip' && manual && (!subject.trim() || !session.trim());
+    }
+
+    $(document).on('input', '#structured-subject-labeling input, #structured-session-labeling input', updateBeginUploadState);
 
     function disableForm(theform) {
         if (document.getElementById) {
@@ -118,6 +182,7 @@
                     .removeClass('hidden')
                     .find('input').prop('disabled',false).prop('required','required');
         }
+        updateBeginUploadState();
     });
 
     $(document).on('click','.info-labeling-options',function(){
@@ -125,6 +190,21 @@
             "title": "Customized Labeling on Compressed Uploads",
             "width": 450,
             "content": "For a single session, you can specify a custom label for subject and session rather than relying on importing values from DICOM fields during import. Custom labeling depends on using the DICOM-Zip importer, and this feature should not be used if multiple sessions are packed in a single ZIP file &ndash; the resulting upload will create a merge error in the Prearchive. ",
+            "buttons": [
+                {
+                    "label": "OK",
+                    "isDefault": true,
+                    "close": true
+                }
+            ]
+        })
+    });
+
+    $(document).on('click','.info-structured-labeling-options',function(){
+        XNAT.dialog.open({
+            "title": "Customized Labeling on Structured Uploads",
+            "width": 450,
+            "content": "By default, $displayManager.getSingularDisplayNameForSubject().toLowerCase() and $displayManager.getSingularDisplayNameForImageSession().toLowerCase() labels are extracted from the archive's CSV manifest. Selecting <b>Customize</b> lets you specify both labels yourself: any $displayManager.getSingularDisplayNameForSubject().toLowerCase() or $displayManager.getSingularDisplayNameForImageSession().toLowerCase() labels in the CSV manifest are <b>ignored</b>, and the values you enter here are used instead. The manifest is still used for scan metadata. When Customize is selected, the uploaded archive must contain only a <b>single $displayManager.getSingularDisplayNameForImageSession().toLowerCase()</b> &ndash; archives whose manifest contains multiple $displayManager.getSingularDisplayNameForSubject().toLowerCase()s or $displayManager.getSingularDisplayNameForImageSession().toLowerCase()s will fail to import. Both fields are required before the upload can begin.",
             "buttons": [
                 {
                     "label": "OK",
@@ -156,13 +236,24 @@
             return false;
         }
         var handler = document.getElementById('import-handler').value;
+        // Two rows carry input[name=subject]/input[name=session] (DICOM and
+        // structured labeling), so lookups must be scoped to the right row.
         if (handler === "DICOM-zip") {
-            var customSubjectLabel = $('#uploadFORM').find('input[name=subject]');
-            var customSessionLabel = $('#uploadFORM').find('input[name=session]');
+            var customSubjectLabel = $('#subject-labeling').find('input[name=subject]');
+            var customSessionLabel = $('#session-labeling').find('input[name=session]');
             if ((customSubjectLabel.prop('required') && !customSubjectLabel.val().length) || (customSessionLabel.prop('required') && !customSessionLabel.val().length)) {
                 xmodal.message('Upload Action', 'If you are customizing labels for $displayManager.getSingularDisplayNameForSubject().toLowerCase() and $displayManager.getSingularDisplayNameForImageSession().toLowerCase(), both inputs require a value.');
                 if (!customSubjectLabel.val().length) customSubjectLabel.addClass('invalid');
                 if (!customSessionLabel.val().length) customSessionLabel.addClass('invalid');
+                return false;
+            }
+        } else if (handler === "Structured-Zip") {
+            var structuredSubjectLabel = $('#structured-subject-labeling').find('input[name=subject]');
+            var structuredSessionLabel = $('#structured-session-labeling').find('input[name=session]');
+            if ((structuredSubjectLabel.prop('required') && !structuredSubjectLabel.val().trim().length) || (structuredSessionLabel.prop('required') && !structuredSessionLabel.val().trim().length)) {
+                xmodal.message('Upload Action', 'If you are customizing labels for $displayManager.getSingularDisplayNameForSubject().toLowerCase() and $displayManager.getSingularDisplayNameForImageSession().toLowerCase(), both inputs require a value.');
+                if (!structuredSubjectLabel.val().trim().length) structuredSubjectLabel.addClass('invalid');
+                if (!structuredSessionLabel.val().trim().length) structuredSessionLabel.addClass('invalid');
                 return false;
             }
         }
@@ -341,14 +432,14 @@
                 </td>
             </tr>
             <tr id="structured-custom-labeling">
-                <th align="left">Labeling <i class="fa fa-question-circle info-labeling-options" style="color: #084fab; cursor: pointer"></i></th>
+                <th align="left">Labeling <i class="fa fa-question-circle info-structured-labeling-options" style="color: #084fab; cursor: pointer"></i></th>
                 <td>
                     <label><input type="radio" name="toggleStructuredSessionLabeling" class="toggleStructuredSessionLabeling" value="derived" checked="checked" style="padding-right: 1.5em" /> Extract From Structure (Default)</label>
                     <label><input type="radio" name="toggleStructuredSessionLabeling" class="toggleStructuredSessionLabeling" value="manual" />Customize</label>
                 </td>
             </tr>
             <tr class="hidden optional-structured-labeling" id="structured-subject-labeling">
-                <th align="left">$displayManager.getSingularDisplayNameForSubject() ID</th>
+                <th align="left">$displayManager.getSingularDisplayNameForSubject() Label</th>
                 <td>
                     <input type="text" name="subject" disabled />
                 </td>
@@ -357,6 +448,17 @@
                 <th align="left">$displayManager.getSingularDisplayNameForImageSession() Label</th>
                 <td>
                     <input type="text" name="session" disabled />
+                </td>
+            </tr>
+            <tr class="hidden optional-structured-labeling" id="structured-labeling-note">
+                <th></th>
+                <td>
+                    <div class="description" style="max-width: 520px; font-size: 11px; color: #666;">
+                        The uploaded archive must contain only a single $displayManager.getSingularDisplayNameForImageSession().toLowerCase().
+                        Any $displayManager.getSingularDisplayNameForSubject().toLowerCase() or
+                        $displayManager.getSingularDisplayNameForImageSession().toLowerCase() labels in the archive's CSV manifest
+                        are ignored; the values entered here are used instead. Both values are required.
+                    </div>
                 </td>
             </tr>
             <tr id="structured-primary-modality">

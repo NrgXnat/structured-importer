@@ -390,6 +390,171 @@ public class CsvBasedResourceIdentifierServiceTest {
         assertThat(result.entrySet(), is(empty()));
     }
 
+    @Test
+    public void customPropertyValueLandsOnScanResource() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(withCustomMapping("TR", "xnat:mrScanData/parameters/tr", false, null));
+        touch("a.nii");
+        touch("b.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,TR,Path",
+                "1,MR,T1,SES,SUBJ,2500,a.nii",
+                "1,MR,T1,SES,SUBJ,2500,b.nii"
+        );
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
+        assertThat(result.size(), is(1));
+        final ScanResource key = result.keySet().iterator().next();
+        assertThat(key.getCustomProperties().get("xnat:mrScanData/parameters/tr"), equalTo("2500"));
+        assertThat(result.values().iterator().next(), hasSize(2));
+    }
+
+    @Test
+    public void differingCustomScanValuesSplitResources() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(withCustomMapping("TR", "xnat:mrScanData/parameters/tr", false, null));
+        touch("a.nii");
+        touch("b.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,TR,Path",
+                "1,MR,T1,SES,SUBJ,2500,a.nii",
+                "1,MR,T1,SES,SUBJ,3000,b.nii"
+        );
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
+        assertThat(result.size(), is(2));
+    }
+
+    @Test
+    public void blankCustomValueIsOmittedFromResource() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(withCustomMapping("TR", "xnat:mrScanData/parameters/tr", false, null));
+        touch("a.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,TR,Path",
+                "1,MR,T1,SES,SUBJ,,a.nii"
+        );
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
+        assertThat(result.keySet().iterator().next().getCustomProperties().isEmpty(), is(true));
+    }
+
+    @Test
+    public void requiredCustomColumnMissingFromHeaderThrows() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(withCustomMapping("TR", "xnat:mrScanData/parameters/tr", true, null));
+        touch("a.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Path",
+                "1,MR,T1,SES,SUBJ,a.nii"
+        );
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("missing required column"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void customColumnValidationRegexApplies() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(withCustomMapping("TR", "xnat:mrScanData/parameters/tr", false, "^\\d+$"));
+        touch("a.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,TR,Path",
+                "1,MR,T1,SES,SUBJ,not-a-number,a.nii"
+        );
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("does not match"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void duplicatePropertyInConfigThrows() throws Exception {
+        final List<CsvColumnMapping> mappings = new ArrayList<>(defaultMappings());
+        mappings.add(CsvColumnMapping.builder().column("Scan ID Again").property(CsvImportConfigService.PROP_SCAN_ID).build());
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(mappings);
+        writeCsv("Path", "a");
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("more than one column"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void unsupportedCustomPropertyRootThrows() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(withCustomMapping("Name", "xnat:projectData/name", false, null));
+        writeCsv("Path", "a");
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("column \"Name\""));
+        thrown.expectMessage(containsString("root element must be one of"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void inconsistentSessionLevelCustomValueThrows() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(withCustomMapping("Coil", "xnat:mrSessionData/coil", false, null));
+        touch("a.nii");
+        touch("b.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Coil,Path",
+                "1,MR,T1,SES,SUBJ,8ch,a.nii",
+                "2,MR,T2,SES,SUBJ,32ch,b.nii"
+        );
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("inconsistent values"));
+        thrown.expectMessage(containsString("Coil"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void inconsistentSubjectLevelCustomValueThrows() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(withCustomMapping("Group", "xnat:subjectData/group", false, null));
+        touch("a.nii");
+        touch("b.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Group,Path",
+                "1,MR,T1,SES_A,SUBJ,control,a.nii",
+                "2,MR,T2,SES_B,SUBJ,treatment,b.nii"
+        );
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("inconsistent values"));
+        thrown.expectMessage(containsString("Group"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void consistentSessionLevelCustomValueAcrossScansPasses() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(withCustomMapping("Coil", "xnat:mrSessionData/coil", false, null));
+        touch("a.nii");
+        touch("b.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Coil,Path",
+                "1,MR,T1,SES,SUBJ,8ch,a.nii",
+                "2,MR,T2,SES,SUBJ,8ch,b.nii"
+        );
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
+        assertThat(result.size(), is(2));
+    }
+
+    @Test
+    public void legacyConfigYieldsEmptyCustomProperties() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("a.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Path",
+                "1,MR,T1,SES,SUBJ,a.nii"
+        );
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
+        assertThat(result.keySet().iterator().next().getCustomProperties().isEmpty(), is(true));
+    }
+
+    private List<CsvColumnMapping> withCustomMapping(final String column, final String property, final boolean required, final String validation) {
+        final List<CsvColumnMapping> mappings = new ArrayList<>(defaultMappings());
+        mappings.add(CsvColumnMapping.builder().column(column).property(property).required(required).validation(validation).build());
+        return mappings;
+    }
+
     private List<CsvColumnMapping> defaultMappings() {
         return new DefaultCsvImportConfigService(mock(org.nrg.config.services.ConfigService.class)).getDefaultColumnMappings();
     }

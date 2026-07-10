@@ -11,10 +11,11 @@ import java.util.Map;
  * Determines which {@link ResourceIdentifierService} bean an import should use, based on the
  * upload parameters.
  * <p>
- * An explicit {@code resourceIdentifier} parameter selects a bean by name. Otherwise, the legacy
+ * An explicit {@code resourceIdentifier} parameter selects a bean by name. Otherwise, the
  * {@code toggleStructuredSessionLabeling} toggle is honored: its default ({@code derived}) and a
- * blank value select the CSV-manifest service, while any other value selects the directory-walking
- * simple service.
+ * blank value select the CSV-manifest service, while any other value (manual/Customize labeling)
+ * selects the manifest-aware service, which uses the CSV manifest when the archive contains one
+ * and falls back to the directory-walking simple service otherwise.
  */
 final class ResourceIdentifierSelector {
 
@@ -24,6 +25,7 @@ final class ResourceIdentifierSelector {
     public static final String MANUAL_SESSION_LABELING       = "manual";
     public static final String CSV_IDENTIFIER_SERVICE        = StringUtils.uncapitalize(CsvBasedResourceIdentifierService.class.getSimpleName());
     public static final String SIMPLE_IDENTIFIER_SERVICE     = StringUtils.uncapitalize(SimpleResourceIdentifierService.class.getSimpleName());
+    public static final String MANUAL_IDENTIFIER_SERVICE     = "manualResourceIdentifierService";
 
     private ResourceIdentifierSelector() {
     }
@@ -36,6 +38,6 @@ final class ResourceIdentifierSelector {
         final String toggleSessionLabel = (String) parameters.get(PARAM_TOGGLE_SESSION_LABELING);
         return StringUtils.isBlank(toggleSessionLabel) || StringUtils.equals(toggleSessionLabel, DERIVED_SESSION_LABELING)
                ? CSV_IDENTIFIER_SERVICE
-               : SIMPLE_IDENTIFIER_SERVICE;
+               : MANUAL_IDENTIFIER_SERVICE;
     }
 }
