@@ -22,63 +22,8 @@ csvColumnMappingsTab:
     group: structuredImporterTabGroup
     active: false
     contents:
-        ${csvColumnMappingsInfo}
         ${csvColumnMappingsPanel}
         ${csvColumnMappingsScript}
-
-csvColumnMappingsInfo:
-    kind: panel
-    name: csvColumnMappingsInfo
-    label: About CSV Column Mappings
-    contents:
-        csvColumnMappingsHelptext:
-            tag: div.message
-            content: >
-                The structured importer's CSV resource identifier service builds image sessions from a CSV
-                manifest packaged with the upload. The mappings below define how columns in that manifest are
-                matched to XNAT metadata. Each mapping has the following fields:
-                <ul>
-                    <li><b>CSV Column</b> &ndash; the exact header text of the column in the CSV manifest.</li>
-                    <li><b>Property</b> &ndash; the XNAT property the column populates. Choose a built-in property,
-                        <b>Path (file locator)</b> for the special column that locates the file or directory within
-                        the archive (exactly one mapping must be the path column), or <b>Custom&hellip;</b> to enter
-                        any XNAT property path.</li>
-                    <li><b>Required</b> &ndash; whether the column must be present in the manifest and have a value.</li>
-                    <li><b>Validation</b> &ndash; an optional regular expression that each non-blank value must match.</li>
-                </ul>
-                Custom property paths must start with one of the supported root elements, followed by the path of
-                the property within that data type:
-                <ul>
-                    <li>Scan properties: <code>xnat:imageScanData</code> (any modality), or
-                        <code>xnat:mrScanData</code>, <code>xnat:petScanData</code>, <code>xnat:ctScanData</code>,
-                        <code>xnat:srScanData</code> (must match the scan's modality)</li>
-                    <li>Session properties: <code>xnat:imageSessionData</code> (any modality), or
-                        <code>xnat:mrSessionData</code>, <code>xnat:petSessionData</code>, <code>xnat:ctSessionData</code></li>
-                    <li>Subject properties: <code>xnat:subjectData</code></li>
-                </ul>
-                For example, <code>xnat:mrScanData/parameters/tr</code> sets the repetition time on MR scans. Values
-                for session- and subject-level properties must agree across all manifest rows for the same session or
-                subject.
-        csvColumnMappingsExample:
-            tag: div.message
-            content: |
-                <b>Example generated configuration (the built-in default):</b>
-                <pre>
-                [
-                  { "column": "Scan ID",            "property": "xnat:imageScanData/ID" },
-                  { "column": "Modality",           "property": "xnat:imageScanData/modality" },
-                  { "column": "Series Description", "property": "xnat:imageScanData/series_description" },
-                  { "column": "Session Label",      "property": "xnat:imageSessionData/label" },
-                  { "column": "Subject ID",         "property": "xnat:imageSessionData/subject_ID" },
-                  { "column": "Start Date",         "property": "xnat:imageScanData/start_date", "required": false },
-                  { "column": "Start Time",         "property": "xnat:imageScanData/start_time", "required": false },
-                  { "column": "Subject Weight (g)", "property": "xnat:subjectData/demographics[@xsi:type=xnat:demographicData]/weight", "required": false },
-                  { "column": "Resource Name",      "property": "xnat:abstractResource/label", "required": false },
-                  { "column": "Path",               "property": "", "required": true }
-                ]
-                </pre>
-            after: >
-                <br>
 
 csvColumnMappingsPanel:
     kind: panel.form
@@ -88,6 +33,11 @@ csvColumnMappingsPanel:
     url: ~/xapi/structured-importer/csv-column-mappings
     contentType: json
     contents:
+        columnMappingsHelp:
+            tag: div|style=margin-bottom:8px;
+            content: >
+                <a href="#!" class="structured-importer-mappings-help" data-scope="site" title="About CSV column mappings">
+                <i class="fa fa-question-circle" style="color: #084fab;"></i> About CSV column mappings</a>
         columnMappingsTable:
             tag: div#structured-importer-site-csv-table.structured-importer-mappings-table
         columnMappingsPreview:

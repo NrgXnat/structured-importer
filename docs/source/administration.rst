@@ -35,6 +35,10 @@ The table generates a JSON configuration in the background; the **Show generated
 displays it. Problems such as duplicate columns or a missing path column are flagged as
 warnings while editing, and the configuration is validated again when saved and at import time.
 
+The **About CSV column mappings** link above the table opens a dialog describing the mapping
+fields and the supported custom property roots. The dialog includes a sample configuration
+(the built-in default) with a **Copy Sample JSON** button that copies it to the clipboard.
+
 Project-level mappings, when present, override the site-wide configuration. The **Disable**
 button temporarily turns off a project's mappings (they can be restored by saving them again);
 the **Delete** button removes them. In both cases imports into the project fall back to the

@@ -55,6 +55,107 @@ var XNAT = getObject(XNAT || {});
     // Roots accepted for custom property paths; mirrors PropertyTargets.java.
     var CUSTOM_ROOT_PATTERN = /^(xnat:imageScanData|xnat:mrScanData|xnat:petScanData|xnat:ctScanData|xnat:srScanData|xnat:imageSessionData|xnat:mrSessionData|xnat:petSessionData|xnat:ctSessionData|xnat:subjectData)\/.+/i;
 
+    // The built-in default configuration, shown in the help dialog as a sample.
+    csv.SAMPLE_CONFIG = [
+        { column: 'Scan ID',            property: 'xnat:imageScanData/ID' },
+        { column: 'Modality',           property: 'xnat:imageScanData/modality' },
+        { column: 'Series Description', property: 'xnat:imageScanData/series_description' },
+        { column: 'Session Label',      property: 'xnat:imageSessionData/label' },
+        { column: 'Subject ID',         property: 'xnat:imageSessionData/subject_ID' },
+        { column: 'Start Date',         property: 'xnat:imageScanData/start_date', required: false },
+        { column: 'Start Time',         property: 'xnat:imageScanData/start_time', required: false },
+        { column: 'Subject Weight (g)', property: 'xnat:subjectData/demographics[@xsi:type=xnat:demographicData]/weight', required: false },
+        { column: 'Resource Name',      property: 'xnat:abstractResource/label', required: false },
+        { column: 'Path',               property: '', required: true }
+    ];
+
+    function sampleJson() {
+        return JSON.stringify(csv.SAMPLE_CONFIG, null, 2);
+    }
+
+    function helpContent(scope) {
+        var intro = scope === 'project'
+            ? 'These mappings define how columns in a CSV import manifest are matched to XNAT metadata for ' +
+              'imports into <b>this project</b>. When set, they <b>override</b> the site-wide configuration; ' +
+              'use the Disable or Delete buttons to fall back to the site-wide mappings.'
+            : 'The structured importer’s CSV resource identifier service builds image sessions from a CSV ' +
+              'manifest packaged with the upload. The mappings define how columns in that manifest are matched ' +
+              'to XNAT metadata. This configuration applies to every project that does not define its own ' +
+              'project-level mappings.';
+        return '<div class="structured-importer-mappings-help-content">' +
+            '<p>' + intro + '</p>' +
+            '<p>Each mapping has the following fields:</p>' +
+            '<ul>' +
+            '<li><b>CSV Column</b> &ndash; the exact header text of the column in the CSV manifest.</li>' +
+            '<li><b>Property</b> &ndash; the XNAT property the column populates. Choose a built-in property, ' +
+            '<b>Path (file locator)</b> for the special column that locates the file or directory within ' +
+            'the archive (exactly one mapping must be the path column), or <b>Custom&hellip;</b> to enter ' +
+            'any XNAT property path.</li>' +
+            '<li><b>Required</b> &ndash; whether the column must be present in the manifest and have a value.</li>' +
+            '<li><b>Validation</b> &ndash; an optional regular expression that each non-blank value must match.</li>' +
+            '</ul>' +
+            '<p>Custom property paths must start with one of the supported root elements, followed by the path ' +
+            'of the property within that data type:</p>' +
+            '<ul>' +
+            '<li>Scan properties: <code>xnat:imageScanData</code> (any modality), or <code>xnat:mrScanData</code>, ' +
+            '<code>xnat:petScanData</code>, <code>xnat:ctScanData</code>, <code>xnat:srScanData</code> ' +
+            '(must match the scan’s modality)</li>' +
+            '<li>Session properties: <code>xnat:imageSessionData</code> (any modality), or ' +
+            '<code>xnat:mrSessionData</code>, <code>xnat:petSessionData</code>, <code>xnat:ctSessionData</code></li>' +
+            '<li>Subject properties: <code>xnat:subjectData</code></li>' +
+            '</ul>' +
+            '<p>For example, <code>xnat:mrScanData/parameters/tr</code> sets the repetition time on MR scans. ' +
+            'Values for session- and subject-level properties must agree across all manifest rows for the same ' +
+            'session or subject.</p>' +
+            '<p style="margin-bottom:4px;"><b>Sample configuration (the built-in default):</b></p>' +
+            '<div style="border:1px solid #ddd;border-radius:3px;background:#f7f7f7;max-height:260px;overflow:auto;">' +
+            '<pre class="structured-importer-sample-json" style="margin:0;padding:8px;font-size:11px;">' + sampleJson() + '</pre>' +
+            '</div>' +
+            '<button type="button" class="btn btn-sm structured-importer-copy-sample" style="margin-top:8px;">Copy Sample JSON</button>' +
+            '</div>';
+    }
+
+    csv.showHelp = function(scope) {
+        XNAT.dialog.open({
+            title: 'CSV Column Mappings',
+            width: 640,
+            content: helpContent(scope),
+            buttons: [
+                {
+                    label: 'OK',
+                    isDefault: true,
+                    close: true
+                }
+            ]
+        });
+    };
+
+    function copyToClipboard(text, done) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, function() {
+                legacyCopy(text, done);
+            });
+        } else {
+            legacyCopy(text, done);
+        }
+    }
+
+    // Fallback for browsers/contexts (e.g. plain http) without the async clipboard API.
+    function legacyCopy(text, done) {
+        var textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.cssText = 'position:fixed;top:-1000px;left:-1000px;';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            done();
+        } catch (e) {
+            console.error('Unable to copy sample JSON to the clipboard', e);
+        }
+        document.body.removeChild(textarea);
+    }
+
     function siteUrl() {
         return XNAT.url.rootUrl('/xapi/structured-importer/csv-column-mappings');
     }
@@ -537,6 +638,25 @@ var XNAT = getObject(XNAT || {});
     };
 
     // Delegated handlers, so they work regardless of when the buttons render.
+    $(document).off('click.structimport', '.structured-importer-mappings-help')
+               .on('click.structimport', '.structured-importer-mappings-help', function(e) {
+                   e.preventDefault();
+                   csv.showHelp($(this).data('scope'));
+               });
+    $(document).off('click.structimport', '.structured-importer-copy-sample')
+               .on('click.structimport', '.structured-importer-copy-sample', function(e) {
+                   e.preventDefault();
+                   var button = this;
+                   copyToClipboard(sampleJson(), function() {
+                       var label = button.textContent;
+                       button.textContent = 'Copied!';
+                       button.disabled = true;
+                       setTimeout(function() {
+                           button.textContent = label;
+                           button.disabled = false;
+                       }, 1500);
+                   });
+               });
     $(document).off('click.structimport', '#' + DISABLE_BUTTON_ID)
                .on('click.structimport', '#' + DISABLE_BUTTON_ID, function(e) {
                    e.preventDefault();
