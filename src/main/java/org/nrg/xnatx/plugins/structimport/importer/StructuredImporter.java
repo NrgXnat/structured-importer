@@ -9,20 +9,15 @@ import org.apache.commons.lang3.StringUtils;
 import org.nrg.action.ClientException;
 import org.nrg.action.ServerException;
 import org.nrg.xdat.XDAT;
-import org.nrg.xdat.om.XnatCtscandata;
-import org.nrg.xdat.om.XnatCtsessiondata;
+import org.nrg.xdat.base.BaseElement;
 import org.nrg.xdat.om.XnatExperimentdata;
 import org.nrg.xdat.om.XnatImagescandata;
 import org.nrg.xdat.om.XnatImagesessiondata;
-import org.nrg.xdat.om.XnatMrscandata;
-import org.nrg.xdat.om.XnatMrsessiondata;
-import org.nrg.xdat.om.XnatPetscandata;
-import org.nrg.xdat.om.XnatPetsessiondata;
 import org.nrg.xdat.om.XnatResourcecatalog;
-import org.nrg.xdat.om.XnatSrscandata;
 import org.nrg.xdat.om.XnatSubjectdata;
 import org.nrg.xdat.security.helpers.Permissions;
 import org.nrg.xdat.services.cache.UserDataCache;
+import org.nrg.xft.XFTItem;
 import org.nrg.xft.event.EventUtils;
 import org.nrg.xft.security.UserI;
 import org.nrg.xft.utils.SaveItemHelper;
@@ -33,7 +28,9 @@ import org.nrg.xnat.restlet.actions.importer.ImporterHandlerA;
 import org.nrg.xnat.restlet.util.FileWriterWrapperI;
 import org.nrg.xnat.restlet.util.XNATRestConstants;
 import org.nrg.xnat.services.archive.CatalogService;
+import org.nrg.xnatx.plugins.structimport.models.ModalityMapping;
 import org.nrg.xnatx.plugins.structimport.models.PropertyTargets;
+import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService.ScanResource;
 
@@ -45,10 +42,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -58,9 +55,8 @@ import static org.nrg.xft.event.XftItemEventI.CREATE;
 @Getter(AccessLevel.PROTECTED)
 @Slf4j
 public class StructuredImporter extends ImporterHandlerA {
-    public static final String       IMPORTER_HANDLER          = "Structured-Zip";
-    public static final List<String> SUPPORTED_MODALITIES      = Arrays.asList("MR", "PET", "CT");
-    public static final String       PARAM_RESOURCE_IDENTIFIER = ResourceIdentifierSelector.PARAM_RESOURCE_IDENTIFIER;
+    public static final String IMPORTER_HANDLER          = "Structured-Zip";
+    public static final String PARAM_RESOURCE_IDENTIFIER = ResourceIdentifierSelector.PARAM_RESOURCE_IDENTIFIER;
 
     private static final String EXTRACTED_FOLDER       = "extracted";
     private static final String PARAM_PROJECT          = "project";
@@ -74,6 +70,7 @@ public class StructuredImporter extends ImporterHandlerA {
     private final UserDataCache             userDataCache;
     private final CatalogService            catalogService;
     private final ResourceIdentifierService resourceIdentifierService;
+    private final ModalityDataTypeService   modalityDataTypeService;
     private final FileWriterWrapperI        fileWriter;
     private final Map<String, Object>       parameters;
     private final String                    username;
@@ -93,6 +90,7 @@ public class StructuredImporter extends ImporterHandlerA {
         this.userDataCache             = XDAT.getContextService().getBean(UserDataCache.class);
         this.catalogService            = XDAT.getContextService().getBean(CatalogService.class);
         this.resourceIdentifierService = XDAT.getContextService().getBean(ResourceIdentifierSelector.select(parameters), ResourceIdentifierService.class);
+        this.modalityDataTypeService   = XDAT.getContextService().getBean(ModalityDataTypeService.class);
         this.fileWriter                = fileWriter;
         this.parameters                = parameters;
         this.username                  = user.getUsername();
@@ -302,31 +300,45 @@ public class StructuredImporter extends ImporterHandlerA {
         return null;
     }
 
-    private XnatImagesessiondata createNewSession() {
-        switch (getPrimaryModality()) {
-            case "MR":
-                return new XnatMrsessiondata();
-            case "PET":
-                return new XnatPetsessiondata();
-            case "CT":
-                return new XnatCtsessiondata();
-            default:
-                throw new IllegalArgumentException("Invalid modality: " + getPrimaryModality());
+    private XnatImagesessiondata createNewSession() throws ClientException {
+        final ModalityMapping mapping  = requireModalityMapping(getPrimaryModality());
+        final String          dataType = mapping.getSession();
+        if (StringUtils.isBlank(dataType)) {
+            throw new ClientException("The modality \"" + mapping.getModality() + "\" has no session data type configured");
         }
+        final Object instance = instantiateDataType(dataType);
+        if (!(instance instanceof XnatImagesessiondata)) {
+            throw new ClientException("The data type " + dataType + " configured for sessions of modality \"" + mapping.getModality() + "\" is not an image session data type");
+        }
+        return (XnatImagesessiondata) instance;
     }
 
-    private XnatImagescandata createScanObject(final String modality) {
-        switch (modality) {
-            case "MR":
-                return new XnatMrscandata();
-            case "PET":
-                return new XnatPetscandata();
-            case "CT":
-                return new XnatCtscandata();
-            case "SR":
-                return new XnatSrscandata();
-            default:
-                throw new IllegalArgumentException("Invalid modality: " + modality);
+    private XnatImagescandata createScanObject(final String modality) throws ClientException {
+        final ModalityMapping mapping  = requireModalityMapping(modality);
+        final String          dataType = mapping.getScan();
+        if (StringUtils.isBlank(dataType)) {
+            throw new ClientException("The modality \"" + mapping.getModality() + "\" has no scan data type configured");
+        }
+        final Object instance = instantiateDataType(dataType);
+        if (!(instance instanceof XnatImagescandata)) {
+            throw new ClientException("The data type " + dataType + " configured for scans of modality \"" + mapping.getModality() + "\" is not an image scan data type");
+        }
+        return (XnatImagescandata) instance;
+    }
+
+    private ModalityMapping requireModalityMapping(final String modality) throws ClientException {
+        final Optional<ModalityMapping> mapping = modalityDataTypeService.getModalityMapping(modality);
+        if (!mapping.isPresent()) {
+            throw new ClientException("The modality \"" + modality + "\" is not configured for the structured importer");
+        }
+        return mapping.get();
+    }
+
+    private Object instantiateDataType(final String dataType) throws ClientException {
+        try {
+            return BaseElement.GetGeneratedItem(XFTItem.NewItem(dataType, getUser()));
+        } catch (Exception e) {
+            throw new ClientException("Unable to create an instance of data type " + dataType + "; is that data type installed on this server?", e);
         }
     }
 
@@ -352,8 +364,10 @@ public class StructuredImporter extends ImporterHandlerA {
         if (StringUtils.isBlank(primaryModality)) {
             throw new ClientException("Missing required parameter: " + PARAM_PRIMARY_MODALITY);
         }
-        if (!SUPPORTED_MODALITIES.contains(primaryModality)) {
-            throw new ClientException("This importer currently only supports the modalities \"" + String.join("\", \"", SUPPORTED_MODALITIES) + "\"");
+        final Optional<ModalityMapping> mapping = modalityDataTypeService.getModalityMapping(primaryModality);
+        if (!mapping.isPresent() || !mapping.get().hasSessionDataType()) {
+            throw new ClientException("The modality \"" + primaryModality + "\" is not configured for session creation; supported session modalities: "
+                                      + modalityDataTypeService.getSessionModalities().stream().map(ModalityMapping::getModality).collect(Collectors.joining(", ")));
         }
         if (!Permissions.verifyProjectExists(XDAT.getNamedParameterJdbcTemplate(), projectId)) {
             throw new ClientException("Project " + projectId + " does not exist");

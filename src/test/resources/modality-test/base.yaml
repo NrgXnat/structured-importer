@@ -1,0 +1,11 @@
+MR:
+  scan: xnat:mrScanData
+  session: xnat:mrSessionData
+  group: 0
+US:
+  scan: xnat:usScanData
+  session: xnat:usSessionData
+  group: 2
+SC:
+  scan: xnat:scScanData
+  group: 2

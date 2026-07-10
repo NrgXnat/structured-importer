@@ -48,7 +48,9 @@ Each column maps to a property on the subject, session, or scan:
      - The scan identifier.
      - Yes
    * - Modality
-     - The scan modality (``MR``, ``PET``, ``CT``, or ``SR``).
+     - The scan modality. Must be configured with a scan data type in the
+       modality configuration (see :doc:`administration`); the import fails
+       otherwise.
      - Yes
    * - Series Description
      - The scan's series description.
@@ -135,6 +137,7 @@ error — including the offending row and column where applicable — when:
 * a required column is missing from the header, or a required value is blank;
 * a value does not match the validation pattern configured for its column;
 * a date, time, or number cannot be parsed;
+* a modality is not configured with a scan data type;
 * a path is absolute, escapes the archive root, or does not exist;
 * the same subject is given inconsistent subject-weight values across rows, or a
   session- or subject-level custom property is given inconsistent values;

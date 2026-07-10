@@ -28,6 +28,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Subject ID" field to "Subject Label".
 - When the Structured Zip importer is selected, the **Destination** is forced to Archive and the
   destination controls are disabled (structured imports always write directly to the archive).
+- **Configurable modality-to-data-type mappings** replace the fixed MR/PET/CT list. The new
+  `ModalityDataTypeService` loads its defaults from
+  `META-INF/xnat/structimport/core/modality-to-xft.yaml` and merges any other YAML files on the
+  classpath matching `META-INF/xnat/structimport/**/*.yaml` on top, so deployments and other
+  plugins can override or extend the configuration. Each modality maps to a session data type,
+  a scan data type, or both, plus a display-precedence group. The compressed uploader's Primary
+  modality drop-down now lists every session-capable modality with a built-in search box, the
+  importer instantiates sessions and scans generically from the configured data types, CSV
+  manifests that reference unconfigured modalities are rejected, and the merged configuration
+  is available from `GET /xapi/structured-importer/modalities`. Modalities whose data types are
+  not installed on the server are filtered out of the effective configuration (logged at INFO),
+  so configurations can safely reference data types from newer XNAT versions or optional
+  plugins.
 
 ### Changed
 

@@ -7,8 +7,10 @@ import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.lang3.StringUtils;
 import org.nrg.xft.security.UserI;
 import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
+import org.nrg.xnatx.plugins.structimport.models.ModalityMapping;
 import org.nrg.xnatx.plugins.structimport.models.PropertyTargets;
 import org.nrg.xnatx.plugins.structimport.services.CsvImportConfigService;
+import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -31,6 +33,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -62,11 +65,13 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
             new DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("h:mma").toFormatter(Locale.US),
             DateTimeFormatter.ISO_LOCAL_TIME);
 
-    private final CsvImportConfigService configService;
+    private final CsvImportConfigService  configService;
+    private final ModalityDataTypeService modalityDataTypeService;
 
     @Autowired
-    public CsvBasedResourceIdentifierService(final CsvImportConfigService configService) {
-        this.configService = configService;
+    public CsvBasedResourceIdentifierService(final CsvImportConfigService configService, final ModalityDataTypeService modalityDataTypeService) {
+        this.configService           = configService;
+        this.modalityDataTypeService = modalityDataTypeService;
     }
 
     @Override
@@ -118,6 +123,7 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
             final String sessionLabel      = context.value(record, header, CsvImportConfigService.PROP_SESSION_LABEL);
             final String scanId            = context.value(record, header, CsvImportConfigService.PROP_SCAN_ID);
             final String modality          = context.value(record, header, CsvImportConfigService.PROP_MODALITY);
+            validateModality(modality, record.getRecordNumber());
             final String seriesDescription = context.value(record, header, CsvImportConfigService.PROP_SERIES_DESCRIPTION);
             final String resourceValue     = context.value(record, header, CsvImportConfigService.PROP_RESOURCE_NAME);
             final String name              = StringUtils.isNotBlank(resourceValue) ? resourceValue : DEFAULT_RESOURCE_NAME;
@@ -145,6 +151,24 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
 
         validateConsistency(resources.keySet(), context);
         return resources;
+    }
+
+    /**
+     * Each row's modality determines the data type of the scan the importer
+     * creates, so it must be configured with a scan data type in the
+     * {@link ModalityDataTypeService}.
+     */
+    private void validateModality(final String modality, final long rowNumber) {
+        if (modality == null) {
+            return;
+        }
+        final Optional<ModalityMapping> mapping = modalityDataTypeService.getModalityMapping(modality);
+        if (!mapping.isPresent()) {
+            throw new IllegalStateException("CSV row " + rowNumber + " specifies the modality \"" + modality + "\", which is not configured for the structured importer");
+        }
+        if (!mapping.get().hasScanDataType()) {
+            throw new IllegalStateException("CSV row " + rowNumber + " specifies the modality \"" + modality + "\", which has no scan data type configured");
+        }
     }
 
     private static String required(final CSVRecord record, final String column) {

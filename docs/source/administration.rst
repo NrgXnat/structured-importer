@@ -47,3 +47,38 @@ button temporarily turns off a project's mappings (they can be restored by savin
 the **Delete** button removes them. In both cases imports into the project fall back to the
 site-wide configuration.
 
+Modality Data Types
+-------------------
+
+The modalities the structured importer understands — and the XNAT data types it creates for
+sessions and scans of each — are configured in YAML. The built-in defaults ship with the plugin
+at ``META-INF/xnat/structimport/core/modality-to-xft.yaml``; each top-level key is a modality
+code with up to three properties::
+
+    MR:
+      scan: xnat:mrScanData
+      session: xnat:mrSessionData
+      group: 0
+
+* **scan** — the data type used for scans of this modality. Omitted for session-only
+  modalities (e.g. ``PETMR``).
+* **session** — the data type used for sessions of this modality. Omitted for scan-only
+  modalities (e.g. ``SC``, ``MRS``).
+* **group** — display precedence: group 0 modalities are the most commonly used and sort to
+  the top of the primary-modality list; higher groups sort later.
+
+To override or extend the defaults, ship a YAML file with the same structure anywhere on the
+classpath matching ``META-INF/xnat/structimport/**/*.yaml`` (for example in another plugin
+jar). Override files are merged over the defaults per-field: a field specified in a later file
+replaces the earlier value, and an explicit blank string (``session: ""``) clears an inherited
+value. Changes require an XNAT restart.
+
+The configuration may safely reference data types that only exist in newer XNAT versions or in
+optional plugins: modalities whose data types are not installed on the server are filtered out
+of the effective configuration, and an INFO-level log message reports which modalities were
+removed and which data types were missing.
+
+The fully merged configuration can be retrieved by any authenticated user from
+``GET /xapi/structured-importer/modalities``, ordered by group and then modality code — useful
+as a reference when preparing a CSV manifest.
+

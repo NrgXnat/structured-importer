@@ -39,8 +39,10 @@ Importing the archive
 
 #. From a project, open the compressed uploader and choose the **Structured-Zip**
    importer.
-#. Select the **primary modality** for the session being created (``MR``, ``PET``,
-   or ``CT``).
+#. Select the **primary modality** for the session being created. The drop-down
+   lists every modality configured with a session data type, most common first;
+   type in its search box to filter the list (e.g. typing ``us`` jumps to
+   ``US``).
 #. Choose how session structure is determined:
 
    * **Extract From Structure (Default)** uses the CSV manifest service; the
@@ -72,5 +74,11 @@ describe the cause.
 Supported modalities
 --------------------
 
-Sessions can be created for the **MR**, **PET**, and **CT** modalities. Within a
-session, individual scans may also use the **SR** (structured report) modality.
+The modalities available for sessions and scans come from the modality-to-data-type
+configuration (see :doc:`administration`), which maps each modality code to the
+XNAT data types used for its sessions and scans. Some modalities are scan-only
+(e.g. ``SC`` secondary captures) and can appear within a session but cannot be
+the primary modality; a few are session-only. The full configuration can be
+retrieved from ``/xapi/structured-importer/modalities``, which is useful when
+preparing a CSV manifest: every value in the manifest's modality column must be
+a configured modality with a scan data type, or the import fails.

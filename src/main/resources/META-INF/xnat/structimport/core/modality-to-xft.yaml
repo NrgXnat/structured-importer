@@ -1,0 +1,153 @@
+CR:
+  scan: xnat:crScanData
+  session: xnat:crSessionData
+  group: 1
+CT:
+  scan: xnat:ctScanData
+  session: xnat:ctSessionData
+  group: 0
+DMS:
+  scan: xnat:dmsScanData
+  session: xnat:dmsSessionData
+  group: 3
+DX3DCraniofacial:
+  scan: xnat:dx3DCraniofacialScanData
+  session: xnat:dx3DCraniofacialSessionData
+  group: 3
+DX:
+  scan: xnat:dxScanData
+  session: xnat:dxSessionData
+  group: 2
+ECG:
+  scan: xnat:ecgScanData
+  session: xnat:ecgSessionData
+  group: 2
+EEG:
+  scan: xnat:eegScanData
+  session: xnat:eegSessionData
+  group: 2
+EMG:
+  scan: xnat:emgScanData
+  session: xnat:emgSessionData
+  group: 3
+EOG:
+  scan: xnat:eogScanData
+  session: xnat:eogSessionData
+  group: 3
+EPS:
+  scan: xnat:epsScanData
+  session: xnat:epsSessionData
+  group: 3
+ES:
+  scan: xnat:esScanData
+  session: xnat:esSessionData
+  group: 2
+ESV:
+  scan: xnat:esvScanData
+  session: xnat:esvSessionData
+  group: 3
+GM:
+  scan: xnat:gmScanData
+  session: xnat:gmSessionData
+  group: 2
+GMV:
+  scan: xnat:gmvScanData
+  session: xnat:gmvSessionData
+  group: 3
+HD:
+  scan: xnat:hdScanData
+  session: xnat:hdSessionData
+  group: 3
+IO:
+  scan: xnat:ioScanData
+  session: xnat:ioSessionData
+  group: 3
+MEG:
+  scan: xnat:megScanData
+  session: xnat:megSessionData
+  group: 2
+MG:
+  scan: xnat:mgScanData
+  session: xnat:mgSessionData
+  group: 2
+MRS:
+  scan: xnat:mrsScanData
+  group: 3
+MR:
+  scan: xnat:mrScanData
+  session: xnat:mrSessionData
+  group: 0
+NM:
+  scan: xnat:nmScanData
+  session: xnat:nmSessionData
+  group: 2
+OP:
+  scan: xnat:opScanData
+  session: xnat:opSessionData
+  group: 3
+OPT:
+  scan: xnat:optScanData
+  session: xnat:optSessionData
+  group: 2
+PA:
+  scan: xnat:paScanData
+  session: xnat:paSessionData
+  group: 2
+PETMR:
+  session: xnat:petmrSessionData
+  group: 2
+PET:
+  scan: xnat:petScanData
+  session: xnat:petSessionData
+  group: 0
+POS:
+  scan: xnat:posScanData
+  session: xnat:posSessionData
+  group: 2
+RESP:
+  scan: xnat:respScanData
+  session: xnat:respSessionData
+  group: 3
+RF:
+  scan: xnat:rfScanData
+  session: xnat:rfSessionData
+  group: 2
+RG:
+  scan: xnat:rgScanData
+  session: xnat:rgSessionData
+  group: 2
+RT:
+  scan: xnat:rtImageScanData
+  session: xnat:rtSessionData
+  group: 1
+SC:
+  scan: xnat:scScanData
+  group: 2
+SM:
+  scan: xnat:smScanData
+  session: xnat:smSessionData
+  group: 2
+SR:
+  scan: xnat:srScanData
+  session: xnat:srSessionData
+  group: 2
+US:
+  scan: xnat:usScanData
+  session: xnat:usSessionData
+  group: 2
+XA3D:
+  scan: xnat:xa3DScanData
+  session: xnat:xa3DSessionData
+  group: 3
+XA:
+  scan: xnat:xaScanData
+  session: xnat:xaSessionData
+  group: 2
+XC:
+  scan: xnat:xcScanData
+  session: xnat:xcSessionData
+  group: 2
+XCV:
+  scan: xnat:xcvScanData
+  session: xnat:xcvSessionData
+  group: 3

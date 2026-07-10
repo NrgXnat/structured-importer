@@ -21,7 +21,9 @@ import org.nrg.xdat.security.helpers.Permissions;
 import org.nrg.xdat.security.services.RoleHolder;
 import org.nrg.xdat.security.services.UserManagementServiceI;
 import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
+import org.nrg.xnatx.plugins.structimport.models.ModalityMapping;
 import org.nrg.xnatx.plugins.structimport.services.CsvImportConfigService;
+import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -31,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -56,17 +59,29 @@ import static org.springframework.web.bind.annotation.RequestMethod.POST;
 @Slf4j
 public class StructuredImporterConfigApi extends AbstractXapiRestController {
 
-    private final CsvImportConfigService configService;
-    private final ObjectMapper           mapper;
+    private final CsvImportConfigService  configService;
+    private final ModalityDataTypeService modalityDataTypeService;
+    private final ObjectMapper            mapper;
 
     @Autowired
     public StructuredImporterConfigApi(final UserManagementServiceI userManagementService,
                                        final RoleHolder roleHolder,
-                                       final CsvImportConfigService configService) {
+                                       final CsvImportConfigService configService,
+                                       final ModalityDataTypeService modalityDataTypeService) {
         super(userManagementService, roleHolder);
-        this.configService = configService;
-        this.mapper        = new ObjectMapper();
+        this.configService           = configService;
+        this.modalityDataTypeService = modalityDataTypeService;
+        this.mapper                  = new ObjectMapper();
         this.mapper.findAndRegisterModules();
+    }
+
+    @ApiOperation(value = "Returns the full modality-to-data-type configuration: the built-in defaults merged with any overrides or additions found on the classpath. Modalities are ordered by group (0 = most common) and then by modality code.",
+                  response = ModalityMapping.class, responseContainer = "List")
+    @ApiResponses({@ApiResponse(code = 200, message = "The modality configuration."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/modalities", method = GET, restrictTo = Authenticated, produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<ModalityMapping> getModalityMappings() {
+        return new ArrayList<>(modalityDataTypeService.getModalityMappings().values());
     }
 
     @ApiOperation(value = "Returns the site-wide CSV column mappings.")

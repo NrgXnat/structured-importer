@@ -1,0 +1,10 @@
+# overrides the base configuration: bumps MR's group, clears US's session
+# data type, and adds a new modality
+MR:
+  group: 1
+US:
+  session: ""
+XNEW:
+  scan: xnat:xnewScanData
+  session: xnat:xnewSessionData
+  group: 1

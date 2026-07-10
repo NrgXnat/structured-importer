@@ -7,6 +7,8 @@
 #* @vtlvariable name="sectionTitle" type="java.lang.String" *#
 #* @vtlvariable name="session" type="org.nrg.xdat.bean.XnatImagesessiondataBean" *#
 #* @vtlvariable name="uploadID" type="java.lang.String" *#
+<link rel="stylesheet" type="text/css" href="$content.getURI('scripts/lib/jquery-plugins/chosen/chosen.min.css')">
+<script type="text/javascript" src="$content.getURI('scripts/lib/jquery-plugins/chosen/chosen.jquery.min.js')"></script>
 <script type="text/javascript">
     XNAT.app = getObject(XNAT.app || {});
 
@@ -118,6 +120,17 @@
     }
 
     $(document).on('input', '#structured-subject-labeling input, #structured-session-labeling input', updateBeginUploadState);
+
+    // Enhance the Primary modality select with a search box (the chosen plugin
+    // shipped with XNAT). An explicit width is required because the control
+    // usually initializes while its table row is hidden.
+    $(function(){
+        $('#primary-modality').chosen({
+            width: '240px',
+            search_contains: true,
+            disable_search_threshold: 0
+        });
+    });
 
     function disableForm(theform) {
         if (document.getElementById) {

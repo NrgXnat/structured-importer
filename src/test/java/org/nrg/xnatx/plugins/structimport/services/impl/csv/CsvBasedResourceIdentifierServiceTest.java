@@ -7,7 +7,9 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.nrg.xft.security.UserI;
 import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
+import org.nrg.xnatx.plugins.structimport.models.ModalityMapping;
 import org.nrg.xnatx.plugins.structimport.services.CsvImportConfigService;
+import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService.ScanResource;
 
 import java.io.IOException;
@@ -22,6 +24,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import static org.hamcrest.CoreMatchers.containsString;
@@ -34,6 +37,7 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -43,16 +47,22 @@ public class CsvBasedResourceIdentifierServiceTest {
     public ExpectedException thrown = ExpectedException.none();
 
     private CsvImportConfigService            configService;
+    private ModalityDataTypeService           modalityService;
     private CsvBasedResourceIdentifierService service;
     private UserI                               user;
     private Path                                root;
 
     @Before
     public void setUp() throws IOException {
-        configService = mock(CsvImportConfigService.class);
-        service       = new CsvBasedResourceIdentifierService(configService);
-        user          = mock(UserI.class);
-        root          = Files.createTempDirectory("csv-based-import-test");
+        configService   = mock(CsvImportConfigService.class);
+        modalityService = mock(ModalityDataTypeService.class);
+        // by default every modality resolves to a scan-capable mapping; individual
+        // tests override specific modalities to exercise validation failures
+        when(modalityService.getModalityMapping(anyString())).thenAnswer(invocation -> Optional.of(
+                ModalityMapping.builder().modality((String) invocation.getArgument(0)).scan("xnat:mrScanData").build()));
+        service = new CsvBasedResourceIdentifierService(configService, modalityService);
+        user    = mock(UserI.class);
+        root    = Files.createTempDirectory("csv-based-import-test");
     }
 
     @After
@@ -547,6 +557,38 @@ public class CsvBasedResourceIdentifierServiceTest {
 
         final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
         assertThat(result.keySet().iterator().next().getCustomProperties().isEmpty(), is(true));
+    }
+
+    @Test
+    public void unknownModalityInManifestThrows() throws Exception {
+        when(modalityService.getModalityMapping(eq("BOGUS"))).thenReturn(Optional.empty());
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("a.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Path",
+                "1,BOGUS,T1,SES,SUBJ,a.nii"
+        );
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("\"BOGUS\""));
+        thrown.expectMessage(containsString("not configured"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void sessionOnlyModalityInManifestThrows() throws Exception {
+        when(modalityService.getModalityMapping(eq("PETMR"))).thenReturn(Optional.of(
+                ModalityMapping.builder().modality("PETMR").session("xnat:petmrSessionData").build()));
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("a.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Path",
+                "1,PETMR,T1,SES,SUBJ,a.nii"
+        );
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("no scan data type"));
+        service.extractResource(root, user, "PROJ");
     }
 
     private List<CsvColumnMapping> withCustomMapping(final String column, final String property, final boolean required, final String validation) {
