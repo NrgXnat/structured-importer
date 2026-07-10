@@ -678,7 +678,6 @@ var XNAT = getObject(XNAT || {});
         } else {
             this.warningsEl.style.display = 'none';
         }
-        this.updatePreview();
     };
 
     csv.editors = {};

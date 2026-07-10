@@ -71,6 +71,6 @@ csvColumnMappingsProjectManage:
 
 # The ?v= query parameter busts browser caches; bump it whenever the script changes.
 csvColumnMappingsProjectScript:
-    tag: script|src="~/scripts/xnat/plugin/structured-importer/csvColumnMappings.js?v=1.2.0"
+    tag: script|src="~/scripts/xnat/plugin/structured-importer/csvColumnMappings.js?v=1.2.1"
 
 #end
