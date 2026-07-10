@@ -116,10 +116,28 @@ var XNAT = getObject(XNAT || {});
     }
 
     csv.showHelp = function(scope) {
+        // Build the dialog body as a DOM node so the copy button's handler can
+        // be attached directly (document-level delegation has proven unreliable
+        // on the settings pages).
+        var content = document.createElement('div');
+        content.innerHTML = helpContent(scope);
+        var copyButton = content.querySelector('.structured-importer-copy-sample');
+        copyButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            copyToClipboard(sampleJson(), function() {
+                var label = copyButton.textContent;
+                copyButton.textContent = 'Copied!';
+                copyButton.disabled = true;
+                setTimeout(function() {
+                    copyButton.textContent = label;
+                    copyButton.disabled = false;
+                }, 1500);
+            });
+        });
         XNAT.dialog.open({
             title: 'CSV Column Mappings',
             width: 640,
-            content: helpContent(scope),
+            content: content,
             buttons: [
                 {
                     label: 'OK',
@@ -129,6 +147,25 @@ var XNAT = getObject(XNAT || {});
             ]
         });
     };
+
+    // Wire the "About CSV column mappings" links with listeners attached
+    // directly to the elements. Safe to call repeatedly; each link is only
+    // bound once.
+    function bindHelpLinks() {
+        var links = document.querySelectorAll('.structured-importer-mappings-help');
+        for (var i = 0; i < links.length; i++) {
+            (function(link) {
+                if (link.structImportHelpBound) {
+                    return;
+                }
+                link.structImportHelpBound = true;
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    csv.showHelp(link.getAttribute('data-scope') || 'site');
+                });
+            })(links[i]);
+        }
+    }
 
     function copyToClipboard(text, done) {
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -547,6 +584,7 @@ var XNAT = getObject(XNAT || {});
     csv.editors = {};
 
     function initEditor(scope, opts, loadUrl) {
+        bindHelpLinks();
         var editor = csv.editors[scope] = new MappingsEditor(opts);
         XNAT.xhr.getJSON({
             url: loadUrl,
@@ -587,6 +625,7 @@ var XNAT = getObject(XNAT || {});
             previewContainerId: PROJECT_INPUT + '-preview',
             emptyHint:          'No project override is configured; the site-wide mappings apply. Add mappings and save to create a project-level override.'
         }, projectUrl(projectId));
+        bindProjectButtons();
     };
 
     csv.disableProject = function() {
@@ -637,36 +676,23 @@ var XNAT = getObject(XNAT || {});
         });
     };
 
-    // Delegated handlers, so they work regardless of when the buttons render.
-    $(document).off('click.structimport', '.structured-importer-mappings-help')
-               .on('click.structimport', '.structured-importer-mappings-help', function(e) {
-                   e.preventDefault();
-                   csv.showHelp($(this).data('scope'));
-               });
-    $(document).off('click.structimport', '.structured-importer-copy-sample')
-               .on('click.structimport', '.structured-importer-copy-sample', function(e) {
-                   e.preventDefault();
-                   var button = this;
-                   copyToClipboard(sampleJson(), function() {
-                       var label = button.textContent;
-                       button.textContent = 'Copied!';
-                       button.disabled = true;
-                       setTimeout(function() {
-                           button.textContent = label;
-                           button.disabled = false;
-                       }, 1500);
-                   });
-               });
-    $(document).off('click.structimport', '#' + DISABLE_BUTTON_ID)
-               .on('click.structimport', '#' + DISABLE_BUTTON_ID, function(e) {
-                   e.preventDefault();
-                   csv.disableProject();
-               });
-    $(document).off('click.structimport', '#' + DELETE_BUTTON_ID)
-               .on('click.structimport', '#' + DELETE_BUTTON_ID, function(e) {
-                   e.preventDefault();
-                   csv.deleteProject();
-               });
+    // Attach listeners directly to the manage buttons (bound once each).
+    function bindProjectButtons() {
+        bindButton(DISABLE_BUTTON_ID, csv.disableProject);
+        bindButton(DELETE_BUTTON_ID, csv.deleteProject);
+    }
+
+    function bindButton(id, action) {
+        var button = document.getElementById(id);
+        if (!button || button.structImportBound) {
+            return;
+        }
+        button.structImportBound = true;
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            action();
+        });
+    }
 
     csv.init = function() {
         whenPresent(SITE_INPUT + '-table', function() { csv.loadSite(); });
