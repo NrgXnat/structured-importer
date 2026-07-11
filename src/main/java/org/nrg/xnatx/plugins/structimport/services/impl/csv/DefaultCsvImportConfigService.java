@@ -11,6 +11,7 @@ import org.nrg.config.services.ConfigService;
 import org.nrg.framework.constants.Scope;
 import org.nrg.xft.security.UserI;
 import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
+import org.nrg.xnatx.plugins.structimport.models.PropertyDisplayMapping;
 import org.nrg.xnatx.plugins.structimport.services.CsvImportConfigService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -115,13 +116,69 @@ public class DefaultCsvImportConfigService implements CsvImportConfigService {
     }
 
     @Override
-    public void initializeSiteConfiguration(final UserI user) {
-        if (getColumnMappings(Scope.Site, null) != null) {
-            log.debug("Site-wide structured CSV import mappings already exist; skipping default creation.");
-            return;
+    public List<PropertyDisplayMapping> getPropertyDisplayMappings() {
+        final Configuration config = configService.getConfig(TOOL_NAME, PROPERTY_DISPLAY_MAPPINGS_PATH, Scope.Site, null);
+        if (config == null || config.getConfigData() == null || StringUtils.isBlank(config.getConfigData().getContents())
+            || Configuration.DISABLED_STRING.equalsIgnoreCase(config.getStatus())) {
+            return getDefaultPropertyDisplayMappings();
         }
-        log.info("Creating default site-wide structured CSV import column mappings.");
-        createOrUpdateColumnMappings(user, Scope.Site, null, getDefaultColumnMappings());
+        try {
+            return mapper.readValue(config.getConfigData().getContents(), new TypeReference<List<PropertyDisplayMapping>>() {});
+        } catch (IOException e) {
+            log.error("Error parsing structured importer property display mappings", e);
+            throw new RuntimeException("Unable to parse structured importer property display mappings", e);
+        }
+    }
+
+    @Override
+    public List<PropertyDisplayMapping> setPropertyDisplayMappings(final UserI user, final List<PropertyDisplayMapping> mappings) {
+        final String json;
+        try {
+            json = mapper.writeValueAsString(mappings);
+        } catch (JsonProcessingException e) {
+            log.error("Error serializing structured importer property display mappings", e);
+            throw new RuntimeException("Unable to serialize structured importer property display mappings", e);
+        }
+        try {
+            configService.replaceConfig(user.getUsername(), "Updating structured importer property display mappings", TOOL_NAME, PROPERTY_DISPLAY_MAPPINGS_PATH, json, Scope.Site, null);
+        } catch (ConfigServiceException e) {
+            log.error("Error storing structured importer property display mappings", e);
+            throw new RuntimeException("Unable to store structured importer property display mappings", e);
+        }
+        return getPropertyDisplayMappings();
+    }
+
+    @Override
+    public List<PropertyDisplayMapping> getDefaultPropertyDisplayMappings() {
+        return Arrays.asList(
+                PropertyDisplayMapping.builder().display("Scan ID").property(PROP_SCAN_ID).build(),
+                PropertyDisplayMapping.builder().display("Scan Modality").property(PROP_MODALITY).build(),
+                PropertyDisplayMapping.builder().display("Series Description").property(PROP_SERIES_DESCRIPTION).build(),
+                PropertyDisplayMapping.builder().display("Scan Start Date").property(PROP_START_DATE).build(),
+                PropertyDisplayMapping.builder().display("Scan Start Time").property(PROP_START_TIME).build(),
+                PropertyDisplayMapping.builder().display("Session Label").property(PROP_SESSION_LABEL).build(),
+                PropertyDisplayMapping.builder().display("Subject Label").property(PROP_SUBJECT_ID).build(),
+                PropertyDisplayMapping.builder().display("Subject Weight").property(PROP_SUBJECT_WEIGHT).build(),
+                PropertyDisplayMapping.builder().display("Resource Name").property(PROP_RESOURCE_NAME).build()
+        );
+    }
+
+    @Override
+    public void initializeSiteConfiguration(final UserI user) {
+        if (getColumnMappings(Scope.Site, null) == null) {
+            log.info("Creating default site-wide structured CSV import column mappings.");
+            createOrUpdateColumnMappings(user, Scope.Site, null, getDefaultColumnMappings());
+        } else {
+            log.debug("Site-wide structured CSV import mappings already exist; skipping default creation.");
+        }
+
+        final Configuration displayConfig = configService.getConfig(TOOL_NAME, PROPERTY_DISPLAY_MAPPINGS_PATH, Scope.Site, null);
+        if (displayConfig == null || displayConfig.getConfigData() == null || StringUtils.isBlank(displayConfig.getConfigData().getContents())) {
+            log.info("Creating default site-wide structured importer property display mappings.");
+            setPropertyDisplayMappings(user, getDefaultPropertyDisplayMappings());
+        } else {
+            log.debug("Site-wide structured importer property display mappings already exist; skipping default creation.");
+        }
     }
 
     @Override

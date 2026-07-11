@@ -42,6 +42,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -186,7 +187,8 @@ public class StructuredImporter extends ImporterHandlerA {
             session.setLabel(sessionLabel);
             session.setModality(getPrimaryModality());
             CustomPropertyApplier.applyProperties(session, PropertyTargets.TargetType.SESSION,
-                                                  CustomPropertyApplier.collectProperties(resources.keySet(), PropertyTargets.TargetType.SESSION));
+                                                  CustomPropertyApplier.collectProperties(resources.keySet(), PropertyTargets.TargetType.SESSION, getModalityDataTypes()),
+                                                  getModalityDataTypes());
 
             SaveItemHelper.authorizedSave(session, getUser(), false, false, EventUtils.newEventInstance(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_FORM, "Created session " + sessionLabel + " for subject " + subjectLabel + " in project " + getProjectId()));
 
@@ -205,7 +207,7 @@ public class StructuredImporter extends ImporterHandlerA {
                 if (resource.getStartTime() != null) {
                     scan.setStarttime(java.sql.Time.valueOf(resource.getStartTime()));
                 }
-                CustomPropertyApplier.applyProperties(scan, PropertyTargets.TargetType.SCAN, resource.getCustomProperties());
+                CustomPropertyApplier.applyProperties(scan, PropertyTargets.TargetType.SCAN, resource.getCustomProperties(), getModalityDataTypes());
                 SaveItemHelper.authorizedSave(scan, getUser(), false, false, EventUtils.newEventInstance(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_FORM, "Created scan " + scan.getId() + " on session " + sessionLabel + " in project " + getProjectId()));
                 log.info("Created scan {} for session {}", scan.getId(), session.getId());
 
@@ -281,7 +283,8 @@ public class StructuredImporter extends ImporterHandlerA {
             }
         }
         CustomPropertyApplier.applyProperties(created, PropertyTargets.TargetType.SUBJECT,
-                                              CustomPropertyApplier.collectProperties(resources, PropertyTargets.TargetType.SUBJECT));
+                                              CustomPropertyApplier.collectProperties(resources, PropertyTargets.TargetType.SUBJECT, getModalityDataTypes()),
+                                              getModalityDataTypes());
         try {
             SaveItemHelper.authorizedSave(created, getUser(), false, true, EventUtils.newEventInstance(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_FORM, "Created subject " + subjectLabel + " in project " + getProjectId()));
         } catch (Exception e) {
@@ -324,6 +327,10 @@ public class StructuredImporter extends ImporterHandlerA {
             throw new ClientException("The data type " + dataType + " configured for scans of modality \"" + mapping.getModality() + "\" is not an image scan data type");
         }
         return (XnatImagescandata) instance;
+    }
+
+    private Collection<ModalityMapping> getModalityDataTypes() {
+        return modalityDataTypeService.getModalityMappings().values();
     }
 
     private ModalityMapping requireModalityMapping(final String modality) throws ClientException {

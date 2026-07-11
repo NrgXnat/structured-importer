@@ -24,10 +24,10 @@ of a CSV import manifest map to XNAT metadata (see :doc:`csv-ris`). Mappings are
 table; each row defines:
 
 * **CSV Column** — the exact header text of the column in the manifest.
-* **Property** — the XNAT property the column populates. Choose a built-in property,
-  **Path (file locator)** for the special column that locates files within the archive
-  (exactly one mapping must be the path column), or **Custom…** to enter any XNAT property
-  path such as ``xnat:mrScanData/parameters/tr``.
+* **Property** — the XNAT property the column populates, chosen by its display value (see
+  `Property Display Mappings`_ below). **Path (file locator)** marks the special column that
+  locates files within the archive (exactly one mapping must be the path column), and
+  **Custom…** opens a dialog for defining a new display-value-to-property mapping.
 * **Required** — whether the column must be present in the manifest and have a value.
 * **Validation** — an optional regular expression that each non-blank value must match.
 
@@ -41,6 +41,34 @@ saved and at import time.
 The **About CSV column mappings** link above the table opens a dialog describing the mapping
 fields and the supported custom property roots. The dialog includes a sample configuration
 (the built-in default) with a **Copy Sample JSON** button that copies it to the clipboard.
+
+Property Display Mappings
+-------------------------
+
+The display values shown in the Property drop-down (e.g. "Scan ID" for
+``xnat:imageScanData/ID``) are themselves configurable. They are maintained **site-wide**: a
+mapping added while configuring one project — via the **Custom…** option in any column-mapping
+editor — becomes available to every project. The built-in properties (Scan ID, Scan Modality,
+Series Description, and so on) are created as the initial mappings.
+
+The **Property Display Mappings** tab in the site settings lists all mappings in a table with
+the display value, the XFT object property, and Edit/Delete actions. Editing opens the same
+dialog as the **Custom…** option, prefilled; deleting removes the mapping (stored column
+mappings that reference the property are not changed — the property simply renders by its raw
+path afterwards). Editing and deleting require site administrator privileges; any authenticated
+user may add mappings.
+
+When a mapping is saved, it is validated:
+
+* the display value and the object property must each be unique — the error message names the
+  currently configured mapping on a collision;
+* the property's root data type must be one of the generic roots (``xnat:imageScanData``,
+  ``xnat:imageSessionData``, ``xnat:subjectData``, ``xnat:abstractResource``) or a data type
+  configured as a scan or session type in the modality configuration (see
+  `Modality Data Types`_).
+
+The mappings are stored through the same configuration service as the CSV column mappings and
+can be retrieved from ``GET /xapi/structured-importer/property-display-mappings``.
 
 Project-level mappings, when present, override the site-wide configuration. The **Disable**
 button temporarily turns off a project's mappings (they can be restored by saving them again);

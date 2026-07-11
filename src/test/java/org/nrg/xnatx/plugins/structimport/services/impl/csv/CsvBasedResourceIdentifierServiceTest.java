@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -60,6 +61,12 @@ public class CsvBasedResourceIdentifierServiceTest {
         // tests override specific modalities to exercise validation failures
         when(modalityService.getModalityMapping(anyString())).thenAnswer(invocation -> Optional.of(
                 ModalityMapping.builder().modality((String) invocation.getArgument(0)).scan("xnat:mrScanData").build()));
+        final Map<String, ModalityMapping> modalityMap = new LinkedHashMap<>();
+        modalityMap.put("MR", ModalityMapping.builder().modality("MR").scan("xnat:mrScanData").session("xnat:mrSessionData").build());
+        modalityMap.put("PET", ModalityMapping.builder().modality("PET").scan("xnat:petScanData").session("xnat:petSessionData").build());
+        modalityMap.put("CT", ModalityMapping.builder().modality("CT").scan("xnat:ctScanData").session("xnat:ctSessionData").build());
+        modalityMap.put("SR", ModalityMapping.builder().modality("SR").scan("xnat:srScanData").build());
+        when(modalityService.getModalityMappings()).thenReturn(modalityMap);
         service = new CsvBasedResourceIdentifierService(configService, modalityService);
         user    = mock(UserI.class);
         root    = Files.createTempDirectory("csv-based-import-test");
@@ -493,7 +500,7 @@ public class CsvBasedResourceIdentifierServiceTest {
 
         thrown.expect(IllegalStateException.class);
         thrown.expectMessage(containsString("column \"Name\""));
-        thrown.expectMessage(containsString("root element must be one of"));
+        thrown.expectMessage(containsString("root element must be"));
         service.extractResource(root, user, "PROJ");
     }
 

@@ -2,10 +2,12 @@ package org.nrg.xnatx.plugins.structimport.importer;
 
 import org.nrg.action.ClientException;
 import org.nrg.xdat.base.BaseElement;
+import org.nrg.xnatx.plugins.structimport.models.ModalityMapping;
 import org.nrg.xnatx.plugins.structimport.models.PropertyTargets;
 import org.nrg.xnatx.plugins.structimport.models.PropertyTargets.TargetType;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService.ScanResource;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -14,8 +16,9 @@ import java.util.Map;
  * {@link ScanResource#getCustomProperties()} to the XNAT objects the importer
  * creates. Property paths under the generic {@code xnat:imageScanData} and
  * {@code xnat:imageSessionData} roots are re-rooted to the concrete data type
- * of the target object; modality-specific roots must match the target's data
- * type exactly. Subject paths are applied as-is.
+ * of the target object; data-type-specific roots (any scan or session type
+ * from the modality configuration) must match the target's data type exactly.
+ * Subject paths are applied as-is.
  */
 final class CustomPropertyApplier {
 
@@ -26,15 +29,16 @@ final class CustomPropertyApplier {
      * Resolves a configured property path against the concrete data type of the
      * object it will be set on.
      *
-     * @param property       the configured property path, e.g. {@code xnat:imageScanData/note} or {@code xnat:mrScanData/parameters/tr}
-     * @param targetXsiType  the xsi type of the target object, e.g. {@code xnat:mrScanData}
+     * @param property         the configured property path, e.g. {@code xnat:imageScanData/note} or {@code xnat:mrScanData/parameters/tr}
+     * @param targetXsiType    the xsi type of the target object, e.g. {@code xnat:mrScanData}
+     * @param modalityMappings the effective modality mappings, whose data types are accepted as roots
      *
      * @return the path to pass to {@code setProperty}
      *
-     * @throws ClientException if the property has a modality-specific root that does not match the target
+     * @throws ClientException if the property has a data-type-specific root that does not match the target
      */
-    static String resolvePath(final String property, final String targetXsiType) throws ClientException {
-        final TargetType target = PropertyTargets.targetOf(property);
+    static String resolvePath(final String property, final String targetXsiType, final Collection<ModalityMapping> modalityMappings) throws ClientException {
+        final TargetType target = PropertyTargets.targetOf(property, modalityMappings);
         if (target == TargetType.SUBJECT) {
             return property;
         }
@@ -53,13 +57,14 @@ final class CustomPropertyApplier {
      *
      * @throws ClientException if a path cannot be resolved for the target or XFT rejects the value
      */
-    static void applyProperties(final BaseElement target, final TargetType targetType, final Map<String, String> properties) throws ClientException {
+    static void applyProperties(final BaseElement target, final TargetType targetType, final Map<String, String> properties,
+                                final Collection<ModalityMapping> modalityMappings) throws ClientException {
         for (final Map.Entry<String, String> entry : properties.entrySet()) {
             final String property = entry.getKey();
-            if (PropertyTargets.targetOf(property) != targetType) {
+            if (PropertyTargets.targetOf(property, modalityMappings) != targetType) {
                 continue;
             }
-            final String path = resolvePath(property, target.getXSIType());
+            final String path = resolvePath(property, target.getXSIType(), modalityMappings);
             try {
                 target.setProperty(path, entry.getValue());
             } catch (Exception e) {
@@ -73,11 +78,12 @@ final class CustomPropertyApplier {
      * across the given resources. Manifest consistency validation guarantees the
      * values agree, so "first" is not a tie-break.
      */
-    static Map<String, String> collectProperties(final Iterable<ScanResource> resources, final TargetType targetType) {
+    static Map<String, String> collectProperties(final Iterable<ScanResource> resources, final TargetType targetType,
+                                                 final Collection<ModalityMapping> modalityMappings) {
         final Map<String, String> collected = new LinkedHashMap<>();
         for (final ScanResource resource : resources) {
             for (final Map.Entry<String, String> entry : resource.getCustomProperties().entrySet()) {
-                if (PropertyTargets.targetOf(entry.getKey()) == targetType) {
+                if (PropertyTargets.targetOf(entry.getKey(), modalityMappings) == targetType) {
                     collected.putIfAbsent(entry.getKey(), entry.getValue());
                 }
             }

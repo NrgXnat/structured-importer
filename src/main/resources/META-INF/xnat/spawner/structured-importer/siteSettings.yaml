@@ -10,6 +10,7 @@ siteSettings:
         structuredImporterTabGroup: Structured Importer
     contents:
         ${csvColumnMappingsTab}
+        ${propertyDisplayMappingsTab}
 
 ####
 #### Structured Importer Site Settings Panels
@@ -50,8 +51,32 @@ csvColumnMappingsPanel:
                 This configuration applies to every project that does not define its own project-level mappings.
                 Changes take effect when you click Save.
 
+propertyDisplayMappingsTab:
+    kind: tab
+    name: propertyDisplayMappingsTab
+    label: Property Display Mappings
+    group: structuredImporterTabGroup
+    active: false
+    contents:
+        ${propertyDisplayMappingsPanel}
+
+propertyDisplayMappingsPanel:
+    kind: panel
+    name: propertyDisplayMappingsPanel
+    label: Property Display Mappings
+    contents:
+        propertyDisplayMappingsIntro:
+            tag: div.description
+            content: >
+                These mappings associate the display values shown in the Property drop-down of the CSV column-mapping
+                editors with XFT object properties. They are maintained site-wide: mappings added here or via the
+                Custom&hellip; option in any column-mapping editor (including project settings) are available to all
+                projects. Deleting a mapping does not change stored column mappings that reference its property.
+        propertyDisplayMappingsTable:
+            tag: div#structured-importer-display-mappings
+
 # The ?v= query parameter busts browser caches; bump it whenever the script changes.
 csvColumnMappingsScript:
-    tag: script|src="~/scripts/xnat/plugin/structured-importer/csvColumnMappings.js?v=1.2.1"
+    tag: script|src="~/scripts/xnat/plugin/structured-importer/csvColumnMappings.js?v=1.3.0"
 
 # end

@@ -27,6 +27,7 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -78,7 +79,7 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
     public Map<ScanResource, List<Path>> extractResource(final Path extractedArchive, final UserI user, final String projectId) {
         log.info("Identifying scan resources from CSV manifest under {}", extractedArchive);
         final List<CsvColumnMapping> mappings = configService.getColumnMappings(user, projectId);
-        final MappingContext         context  = new MappingContext(mappings);
+        final MappingContext         context  = new MappingContext(mappings, modalityDataTypeService.getModalityMappings().values());
         final Path                      csv      = findManifest(extractedArchive);
         try (final Reader reader = Files.newBufferedReader(csv);
              final CSVParser parser = CSVFormat.DEFAULT
@@ -268,7 +269,7 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
             }
             for (final Map.Entry<String, String> entry : resource.getCustomProperties().entrySet()) {
                 final String                     property = entry.getKey();
-                final PropertyTargets.TargetType target   = PropertyTargets.targetOf(property);
+                final PropertyTargets.TargetType target   = context.targetOf(property);
                 if (target == PropertyTargets.TargetType.SCAN) {
                     continue;
                 }
@@ -293,17 +294,19 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
      */
     private static final class MappingContext {
 
-        private final List<CsvColumnMapping> mappings;
-        private final Map<String, String>    columnByProperty       = new LinkedHashMap<>();
-        private final Map<String, String>    customColumnByProperty = new LinkedHashMap<>();
-        private final Map<String, Pattern>           patternByColumn  = new LinkedHashMap<>();
-        private final String                         pathColumn;
+        private final List<CsvColumnMapping>       mappings;
+        private final Collection<ModalityMapping>  modalityMappings;
+        private final Map<String, String>          columnByProperty       = new LinkedHashMap<>();
+        private final Map<String, String>          customColumnByProperty = new LinkedHashMap<>();
+        private final Map<String, Pattern>         patternByColumn        = new LinkedHashMap<>();
+        private final String                       pathColumn;
 
-        private MappingContext(final List<CsvColumnMapping> mappings) {
+        private MappingContext(final List<CsvColumnMapping> mappings, final Collection<ModalityMapping> modalityMappings) {
             if (mappings == null || mappings.isEmpty()) {
                 throw new IllegalStateException("No CSV import column mappings are configured");
             }
-            this.mappings = mappings;
+            this.mappings         = mappings;
+            this.modalityMappings = modalityMappings;
 
             final Set<String> seenProperties     = new LinkedHashSet<>();
             String            resolvedPathColumn = null;
@@ -327,7 +330,7 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
                         columnByProperty.put(normalized, column);
                     } else {
                         try {
-                            PropertyTargets.targetOf(property);
+                            PropertyTargets.targetOf(property, modalityMappings);
                         } catch (IllegalArgumentException e) {
                             throw new IllegalStateException("CSV import configuration column \"" + column + "\": " + e.getMessage(), e);
                         }
@@ -355,6 +358,10 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
 
         private Map<String, String> getCustomColumnsByProperty() {
             return customColumnByProperty;
+        }
+
+        private PropertyTargets.TargetType targetOf(final String property) {
+            return PropertyTargets.targetOf(property, modalityMappings);
         }
 
         private String column(final String property) {

@@ -18,12 +18,15 @@ import org.nrg.xapi.rest.AbstractXapiRestController;
 import org.nrg.xapi.rest.XapiRequestMapping;
 import org.nrg.xdat.XDAT;
 import org.nrg.xdat.security.helpers.Permissions;
+import org.nrg.xdat.security.helpers.Roles;
 import org.nrg.xdat.security.services.RoleHolder;
 import org.nrg.xdat.security.services.UserManagementServiceI;
 import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
 import org.nrg.xnatx.plugins.structimport.models.ModalityMapping;
+import org.nrg.xnatx.plugins.structimport.models.PropertyDisplayMapping;
 import org.nrg.xnatx.plugins.structimport.services.CsvImportConfigService;
 import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
+import org.nrg.xnatx.plugins.structimport.services.impl.csv.PropertyDisplayMappingValidator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -31,6 +34,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -82,6 +86,78 @@ public class StructuredImporterConfigApi extends AbstractXapiRestController {
     @XapiRequestMapping(value = "/modalities", method = GET, restrictTo = Authenticated, produces = MediaType.APPLICATION_JSON_VALUE)
     public List<ModalityMapping> getModalityMappings() {
         return new ArrayList<>(modalityDataTypeService.getModalityMappings().values());
+    }
+
+    @ApiOperation(value = "Returns the property display mappings that populate the Property drop-down in the CSV column-mapping editors. These are maintained site-wide.",
+                  response = PropertyDisplayMapping.class, responseContainer = "List")
+    @ApiResponses({@ApiResponse(code = 200, message = "The property display mappings."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/property-display-mappings", method = GET, restrictTo = Authenticated, produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<PropertyDisplayMapping> getPropertyDisplayMappings() {
+        return configService.getPropertyDisplayMappings();
+    }
+
+    @ApiOperation(value = "Adds a property display mapping, or updates an existing one when the \"replaces\" parameter names the display value being edited. Mappings are site-wide: additions made from a project's settings are available to all projects. Editing requires site administrator privileges.")
+    @ApiResponses({@ApiResponse(code = 200, message = "The stored property display mappings."),
+                   @ApiResponse(code = 400, message = "The submitted mapping is invalid; the response body describes the problems."),
+                   @ApiResponse(code = 403, message = "Not authorized to edit existing mappings."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/property-display-mappings", method = POST, restrictTo = Authenticated, consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> savePropertyDisplayMapping(@RequestBody final PropertyDisplayMapping mapping,
+                                                        @ApiParam("When editing, the display value of the mapping being replaced.")
+                                                        @RequestParam(value = "replaces", required = false) final String replaces) {
+        final String originalDisplay = StringUtils.trimToNull(replaces);
+        if (originalDisplay != null && !Roles.isSiteAdmin(getSessionUser())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Only site administrators may edit existing property display mappings.");
+        }
+
+        final List<PropertyDisplayMapping> current = new ArrayList<>(configService.getPropertyDisplayMappings());
+        final List<String> errors = PropertyDisplayMappingValidator.validate(current, mapping, originalDisplay, modalityDataTypeService);
+        if (!errors.isEmpty()) {
+            return ResponseEntity.badRequest().body(String.join("\n", errors));
+        }
+
+        final PropertyDisplayMapping cleaned = PropertyDisplayMapping.builder()
+                                                                     .display(mapping.getDisplay().trim())
+                                                                     .property(mapping.getProperty().trim())
+                                                                     .build();
+        final int index = originalDisplay == null ? -1 : indexOfDisplay(current, originalDisplay);
+        if (index >= 0) {
+            current.set(index, cleaned);
+        } else {
+            current.add(cleaned);
+        }
+        final List<PropertyDisplayMapping> stored = configService.setPropertyDisplayMappings(getSessionUser(), current);
+        log.info("User {} {} the property display mapping \"{}\" -> {}", getSessionUser().getUsername(),
+                 originalDisplay == null ? "added" : "updated", cleaned.getDisplay(), cleaned.getProperty());
+        return ResponseEntity.ok(stored);
+    }
+
+    @ApiOperation(value = "Deletes a property display mapping by its display value.")
+    @ApiResponses({@ApiResponse(code = 200, message = "The remaining property display mappings."),
+                   @ApiResponse(code = 403, message = "Not authorized to delete mappings."),
+                   @ApiResponse(code = 404, message = "No mapping exists with that display value."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/property-display-mappings/{display}", method = DELETE, restrictTo = Admin, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> deletePropertyDisplayMapping(@ApiParam(value = "The display value of the mapping to delete.", required = true) @PathVariable final String display) {
+        final List<PropertyDisplayMapping> current = new ArrayList<>(configService.getPropertyDisplayMappings());
+        final int index = indexOfDisplay(current, display);
+        if (index < 0) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("No property display mapping exists with the display value \"" + display + "\"");
+        }
+        current.remove(index);
+        final List<PropertyDisplayMapping> stored = configService.setPropertyDisplayMappings(getSessionUser(), current);
+        log.info("User {} deleted the property display mapping \"{}\"", getSessionUser().getUsername(), display);
+        return ResponseEntity.ok(stored);
+    }
+
+    private static int indexOfDisplay(final List<PropertyDisplayMapping> mappings, final String display) {
+        for (int i = 0; i < mappings.size(); i++) {
+            if (StringUtils.equalsIgnoreCase(mappings.get(i).getDisplay(), display)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @ApiOperation(value = "Returns the site-wide CSV column mappings.")

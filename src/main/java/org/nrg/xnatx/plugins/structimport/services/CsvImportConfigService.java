@@ -4,6 +4,7 @@ import org.nrg.framework.constants.Scope;
 import org.nrg.framework.services.NrgService;
 import org.nrg.xft.security.UserI;
 import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
+import org.nrg.xnatx.plugins.structimport.models.PropertyDisplayMapping;
 
 import java.util.List;
 
@@ -22,8 +23,9 @@ import java.util.List;
  */
 public interface CsvImportConfigService extends NrgService {
 
-    String TOOL_NAME            = "CsvBasedResourceIdentifierService";
-    String COLUMN_MAPPINGS_PATH = "column-mappings";
+    String TOOL_NAME                      = "CsvBasedResourceIdentifierService";
+    String COLUMN_MAPPINGS_PATH           = "column-mappings";
+    String PROPERTY_DISPLAY_MAPPINGS_PATH = "property-display-mappings";
 
     /**
      * XNAT property paths the structured importer understands.
@@ -114,8 +116,34 @@ public interface CsvImportConfigService extends NrgService {
     List<CsvColumnMapping> getDefaultColumnMappings();
 
     /**
-     * Creates the default site-wide configuration if no site-wide configuration
-     * exists yet. Intended to be called once at start-up.
+     * Retrieves the property display mappings, which associate human-readable
+     * display values with XFT object property paths for the column-mapping
+     * editors. These are maintained at the site level only: additions made
+     * while configuring a project are available to all projects.
+     *
+     * @return the configured mappings, or the built-in defaults when none are stored
+     */
+    List<PropertyDisplayMapping> getPropertyDisplayMappings();
+
+    /**
+     * Replaces the site-wide property display mappings.
+     *
+     * @param user     the user making the change
+     * @param mappings the full list of mappings to store
+     *
+     * @return the stored mappings
+     */
+    List<PropertyDisplayMapping> setPropertyDisplayMappings(UserI user, List<PropertyDisplayMapping> mappings);
+
+    /**
+     * @return the built-in default property display mappings.
+     */
+    List<PropertyDisplayMapping> getDefaultPropertyDisplayMappings();
+
+    /**
+     * Creates the default site-wide configurations (column mappings and
+     * property display mappings) that do not exist yet. Intended to be called
+     * once at start-up.
      *
      * @param user the user to attribute the configuration creation to
      */

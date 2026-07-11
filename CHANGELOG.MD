@@ -42,6 +42,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so configurations can safely reference data types from newer XNAT versions or optional
   plugins.
 
+- **Property display mappings**: the display values in the column-mapping Property drop-down
+  (e.g. "Scan ID" for `xnat:imageScanData/ID`) are now stored configuration, initialized from
+  the previous built-in list and maintained site-wide — mappings added from a project's settings
+  via the **Custom…** dialog become available to all projects. The dialog validates that the
+  display value and property are unique (reporting the currently configured mapping on a
+  collision) and that the property's root is a generic root or a data type configured for a
+  modality. A new **Property Display Mappings** site settings tab lists the mappings with
+  Edit/Delete actions, and the configuration is available from
+  `GET /xapi/structured-importer/property-display-mappings`. Custom property paths used in
+  column mappings now accept any modality-configured scan or session data type as a root
+  (previously a fixed list).
+
 ### Changed
 
 - **Behavior change:** when a custom subject or session label is supplied with the upload *and*

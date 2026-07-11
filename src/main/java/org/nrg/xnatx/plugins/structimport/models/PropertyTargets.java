@@ -3,10 +3,9 @@ package org.nrg.xnatx.plugins.structimport.models;
 import org.nrg.xnatx.plugins.structimport.services.CsvImportConfigService;
 
 import java.util.Arrays;
-import java.util.LinkedHashMap;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -17,6 +16,12 @@ import java.util.stream.Collectors;
  * {@code parameters/tr}). The root element determines whether the property is
  * set on the scan, the session, or the subject; root matching is
  * case-insensitive, but the relative path is passed to XFT unchanged.
+ *
+ * <p>Besides the generic roots ({@code xnat:imageScanData},
+ * {@code xnat:imageSessionData}, {@code xnat:subjectData}), any data type
+ * configured as a scan or session type in the modality-to-data-type
+ * configuration is a valid root, so classification requires the effective
+ * {@link ModalityMapping} collection.</p>
  */
 public final class PropertyTargets {
 
@@ -30,25 +35,46 @@ public final class PropertyTargets {
      */
     public static final String GENERIC_SCAN_ROOT    = "xnat:imageScanData";
     public static final String GENERIC_SESSION_ROOT = "xnat:imageSessionData";
+    public static final String SUBJECT_ROOT         = "xnat:subjectData";
 
-    private static final Map<String, TargetType> TARGETS_BY_ROOT = buildTargets();
-    private static final Set<String>             BUILT_INS       = buildBuiltIns();
+    private static final Set<String> BUILT_INS = buildBuiltIns();
 
     private PropertyTargets() {
     }
 
     /**
+     * @param propertyPath      the property path to classify
+     * @param modalityMappings  the effective modality mappings, whose scan and session
+     *                          data types are accepted as roots
+     *
      * @return the target object type for the given property path
      *
      * @throws IllegalArgumentException if the path is malformed or its root element is not supported
      */
-    public static TargetType targetOf(final String propertyPath) {
-        final String     root   = rootElement(propertyPath);
-        final TargetType target = TARGETS_BY_ROOT.get(root.toLowerCase(Locale.ROOT));
-        if (target == null) {
-            throw new IllegalArgumentException("Unsupported property \"" + propertyPath + "\": the root element must be one of " + acceptedRoots());
+    public static TargetType targetOf(final String propertyPath, final Collection<ModalityMapping> modalityMappings) {
+        final String root = rootElement(propertyPath);
+        if (root.equalsIgnoreCase(GENERIC_SCAN_ROOT)) {
+            return TargetType.SCAN;
         }
-        return target;
+        if (root.equalsIgnoreCase(GENERIC_SESSION_ROOT)) {
+            return TargetType.SESSION;
+        }
+        if (root.equalsIgnoreCase(SUBJECT_ROOT)) {
+            return TargetType.SUBJECT;
+        }
+        if (modalityMappings != null) {
+            for (final ModalityMapping mapping : modalityMappings) {
+                if (root.equalsIgnoreCase(mapping.getScan())) {
+                    return TargetType.SCAN;
+                }
+                if (root.equalsIgnoreCase(mapping.getSession())) {
+                    return TargetType.SESSION;
+                }
+            }
+        }
+        throw new IllegalArgumentException("Unsupported property \"" + propertyPath + "\": the root element must be "
+                                           + GENERIC_SCAN_ROOT + ", " + GENERIC_SESSION_ROOT + ", " + SUBJECT_ROOT
+                                           + ", or a data type configured as a scan or session type for a modality");
     }
 
     /**
@@ -78,22 +104,6 @@ public final class PropertyTargets {
      */
     public static boolean isBuiltIn(final String propertyPath) {
         return propertyPath != null && BUILT_INS.contains(propertyPath.toLowerCase(Locale.ROOT));
-    }
-
-    private static String acceptedRoots() {
-        return TARGETS_BY_ROOT.keySet().stream().sorted().collect(Collectors.joining(", "));
-    }
-
-    private static Map<String, TargetType> buildTargets() {
-        final Map<String, TargetType> targets = new LinkedHashMap<>();
-        for (final String root : Arrays.asList(GENERIC_SCAN_ROOT, "xnat:mrScanData", "xnat:petScanData", "xnat:ctScanData", "xnat:srScanData")) {
-            targets.put(root.toLowerCase(Locale.ROOT), TargetType.SCAN);
-        }
-        for (final String root : Arrays.asList(GENERIC_SESSION_ROOT, "xnat:mrSessionData", "xnat:petSessionData", "xnat:ctSessionData")) {
-            targets.put(root.toLowerCase(Locale.ROOT), TargetType.SESSION);
-        }
-        targets.put("xnat:subjectdata", TargetType.SUBJECT);
-        return targets;
     }
 
     private static Set<String> buildBuiltIns() {

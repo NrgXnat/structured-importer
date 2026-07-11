@@ -11,6 +11,7 @@ import org.nrg.config.services.ConfigService;
 import org.nrg.framework.constants.Scope;
 import org.nrg.xft.security.UserI;
 import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
+import org.nrg.xnatx.plugins.structimport.models.PropertyDisplayMapping;
 import org.nrg.xnatx.plugins.structimport.services.CsvImportConfigService;
 
 import java.util.Arrays;
@@ -35,6 +36,7 @@ public class DefaultCsvImportConfigServiceTest {
 
     private static final String TOOL = CsvImportConfigService.TOOL_NAME;
     private static final String PATH = CsvImportConfigService.COLUMN_MAPPINGS_PATH;
+    private static final String DISPLAY_PATH = CsvImportConfigService.PROPERTY_DISPLAY_MAPPINGS_PATH;
     private static final String USER = "admin";
     private static final String PROJECT = "PROJ_1";
 
@@ -146,8 +148,10 @@ public class DefaultCsvImportConfigServiceTest {
 
     @Test
     public void initializeSiteConfigurationSkipsWhenAlreadyConfigured() throws Exception {
-        final Configuration existing = configurationWith(mapper.writeValueAsString(service.getDefaultColumnMappings()));
+        final Configuration existing        = configurationWith(mapper.writeValueAsString(service.getDefaultColumnMappings()));
+        final Configuration displayExisting = configurationWith(mapper.writeValueAsString(service.getDefaultPropertyDisplayMappings()));
         when(configService.getConfig(TOOL, PATH, Scope.Site, null)).thenReturn(existing);
+        when(configService.getConfig(TOOL, DISPLAY_PATH, Scope.Site, null)).thenReturn(displayExisting);
         service.initializeSiteConfiguration(user);
         verify(configService, never()).replaceConfig(anyString(), anyString(), anyString(), anyString(), anyString(), any(Scope.class), any());
     }
@@ -155,11 +159,54 @@ public class DefaultCsvImportConfigServiceTest {
     @Test
     public void initializeSiteConfigurationCreatesDefaultWhenAbsent() throws Exception {
         final Configuration defaultsConfig = configurationWith(mapper.writeValueAsString(service.getDefaultColumnMappings()));
+        final Configuration displayConfig  = configurationWith(mapper.writeValueAsString(service.getDefaultPropertyDisplayMappings()));
         when(configService.getConfig(TOOL, PATH, Scope.Site, null)).thenReturn(null, defaultsConfig);
+        when(configService.getConfig(TOOL, DISPLAY_PATH, Scope.Site, null)).thenReturn(null, displayConfig);
 
         service.initializeSiteConfiguration(user);
 
         verify(configService, times(1)).replaceConfig(eq(USER), anyString(), eq(TOOL), eq(PATH), anyString(), eq(Scope.Site), eq((String) null));
+        verify(configService, times(1)).replaceConfig(eq(USER), anyString(), eq(TOOL), eq(DISPLAY_PATH), anyString(), eq(Scope.Site), eq((String) null));
+    }
+
+    @Test
+    public void propertyDisplayMappingsFallBackToDefaultsWhenNotStored() {
+        when(configService.getConfig(TOOL, DISPLAY_PATH, Scope.Site, null)).thenReturn(null);
+        final List<PropertyDisplayMapping> mappings = service.getPropertyDisplayMappings();
+        assertThat(mappings, equalTo(service.getDefaultPropertyDisplayMappings()));
+    }
+
+    @Test
+    public void propertyDisplayMappingsParseStoredJson() throws Exception {
+        final List<PropertyDisplayMapping> stored = Arrays.asList(
+                PropertyDisplayMapping.builder().display("Scan ID").property("xnat:imageScanData/ID").build(),
+                PropertyDisplayMapping.builder().display("Repetition Time").property("xnat:mrScanData/parameters/tr").build());
+        final Configuration storedConfig = configurationWith(mapper.writeValueAsString(stored));
+        when(configService.getConfig(TOOL, DISPLAY_PATH, Scope.Site, null)).thenReturn(storedConfig);
+
+        assertThat(service.getPropertyDisplayMappings(), equalTo(stored));
+    }
+
+    @Test
+    public void setPropertyDisplayMappingsPersistsAtSiteScope() throws Exception {
+        final List<PropertyDisplayMapping> mappings     = service.getDefaultPropertyDisplayMappings();
+        final Configuration                storedConfig = configurationWith(mapper.writeValueAsString(mappings));
+        when(configService.getConfig(TOOL, DISPLAY_PATH, Scope.Site, null)).thenReturn(storedConfig);
+
+        final List<PropertyDisplayMapping> result = service.setPropertyDisplayMappings(user, mappings);
+
+        verify(configService).replaceConfig(eq(USER), anyString(), eq(TOOL), eq(DISPLAY_PATH), anyString(), eq(Scope.Site), eq((String) null));
+        assertThat(result, equalTo(mappings));
+    }
+
+    @Test
+    public void defaultPropertyDisplayMappingsCoverBuiltInProperties() {
+        final List<PropertyDisplayMapping> defaults = service.getDefaultPropertyDisplayMappings();
+        assertThat(defaults.size(), is(9));
+        for (final PropertyDisplayMapping mapping : defaults) {
+            assertThat(mapping.getDisplay(), is(notNullValue()));
+            assertThat(mapping.getProperty(), is(notNullValue()));
+        }
     }
 
     @Test

@@ -29,31 +29,49 @@ var XNAT = getObject(XNAT || {});
     var csv = XNAT.plugin.structuredImporter.csvMappings =
         getObject(XNAT.plugin.structuredImporter.csvMappings || {});
 
+    // guard against the script being included more than once on a page
+    if (csv.__loaded) {
+        return csv;
+    }
+    csv.__loaded = true;
+
     var SITE_INPUT        = 'structured-importer-site-csv';
     var PROJECT_INPUT     = 'structured-importer-project-csv';
     var DISABLE_BUTTON_ID = 'structured-importer-disable-project';
     var DELETE_BUTTON_ID  = 'structured-importer-delete-project';
 
-    var CUSTOM_PROPERTY = '__custom__';
+    var CUSTOM_PROPERTY  = '__custom__';
+    var DISPLAY_TABLE_ID = 'structured-importer-display-mappings';
 
-    // Built-in properties the importer understands, plus the special Path
-    // locator (blank property). Anything else is entered as a custom XNAT
-    // property path via the "Custom…" option.
-    csv.PROPERTY_OPTIONS = [
-        { value: 'xnat:imageScanData/ID',                                              label: 'Scan ID' },
-        { value: 'xnat:imageScanData/modality',                                        label: 'Scan Modality' },
-        { value: 'xnat:imageScanData/series_description',                              label: 'Series Description' },
-        { value: 'xnat:imageScanData/start_date',                                      label: 'Scan Start Date' },
-        { value: 'xnat:imageScanData/start_time',                                      label: 'Scan Start Time' },
-        { value: 'xnat:imageSessionData/label',                                        label: 'Session Label' },
-        { value: 'xnat:imageSessionData/subject_ID',                                   label: 'Subject Label' },
-        { value: 'xnat:subjectData/demographics[@xsi:type=xnat:demographicData]/weight', label: 'Subject Weight' },
-        { value: 'xnat:abstractResource/label',                                        label: 'Resource Name' },
-        { value: '',                                                                   label: 'Path (file locator)' }
-    ];
+    // Display-value -> object-property mappings that populate the Property
+    // drop-downs. Maintained site-wide via the XAPI; loaded before the editors
+    // render and refreshed whenever a mapping is added, edited, or deleted.
+    csv.displayMappings = [];
 
-    // Roots accepted for custom property paths; mirrors PropertyTargets.java.
-    var CUSTOM_ROOT_PATTERN = /^(xnat:imageScanData|xnat:mrScanData|xnat:petScanData|xnat:ctScanData|xnat:srScanData|xnat:imageSessionData|xnat:mrSessionData|xnat:petSessionData|xnat:ctSessionData|xnat:subjectData)\/.+/i;
+    // Root elements that are valid for property paths, lowercased: the generic
+    // roots plus every scan/session data type from the modality configuration.
+    // Used only for soft warnings; empty when the modality config isn't loaded.
+    csv.validRoots = [];
+
+    var GENERIC_ROOTS = ['xnat:imagescandata', 'xnat:imagesessiondata', 'xnat:subjectdata', 'xnat:abstractresource'];
+
+    function displayMappingsUrl() {
+        return XNAT.url.rootUrl('/xapi/structured-importer/property-display-mappings');
+    }
+
+    function modalitiesUrl() {
+        return XNAT.url.rootUrl('/xapi/structured-importer/modalities');
+    }
+
+    // The current Property drop-down options: the display mappings plus the
+    // special Path locator (blank property).
+    csv.propertyOptions = function() {
+        var options = (csv.displayMappings || []).map(function(mapping) {
+            return { value: mapping.property, label: mapping.display };
+        });
+        options.push({ value: '', label: 'Path (file locator)' });
+        return options;
+    };
 
     // The built-in default configuration, shown in the help dialog as a sample.
     csv.SAMPLE_CONFIG = [
@@ -87,10 +105,11 @@ var XNAT = getObject(XNAT || {});
             '<p>Each mapping has the following fields:</p>' +
             '<ul>' +
             '<li><b>CSV Column</b> &ndash; the exact header text of the column in the CSV manifest.</li>' +
-            '<li><b>Property</b> &ndash; the XNAT property the column populates. Choose a built-in property, ' +
-            '<b>Path (file locator)</b> for the special column that locates the file or directory within ' +
-            'the archive (exactly one mapping must be the path column), or <b>Custom&hellip;</b> to enter ' +
-            'any XNAT property path.</li>' +
+            '<li><b>Property</b> &ndash; the XNAT property the column populates. Choose a property from the ' +
+            'drop-down, <b>Path (file locator)</b> for the special column that locates the file or directory ' +
+            'within the archive (exactly one mapping must be the path column), or <b>Custom&hellip;</b> to define ' +
+            'a new display-value-to-property mapping. Custom mappings are shared site-wide and can be managed ' +
+            'under the Property Display Mappings tab in the site settings.</li>' +
             '<li><b>Required</b> &ndash; whether the column must be present in the manifest and have a value.</li>' +
             '<li><b>Validation</b> &ndash; an optional regular expression that each non-blank value must match.</li>' +
             '</ul>' +
@@ -281,17 +300,28 @@ var XNAT = getObject(XNAT || {});
         return JSON.stringify(mappings, null, 2);
     };
 
-    function isBuiltInProperty(value) {
-        return csv.PROPERTY_OPTIONS.some(function(option) {
+    function hasPropertyOption(value) {
+        return csv.propertyOptions().some(function(option) {
             return option.value.toLowerCase() === (value || '').toLowerCase();
         });
     }
 
     function canonicalProperty(value) {
-        var match = csv.PROPERTY_OPTIONS.filter(function(option) {
+        var match = csv.propertyOptions().filter(function(option) {
             return option.value.toLowerCase() === (value || '').toLowerCase();
         })[0];
         return match ? match.value : value;
+    }
+
+    function hasValidRoot(property) {
+        if (!csv.validRoots.length) {
+            return true; // modality configuration unavailable; leave it to the server
+        }
+        var slash = property.indexOf('/');
+        if (slash < 1) {
+            return false;
+        }
+        return csv.validRoots.indexOf(property.substring(0, slash).toLowerCase()) >= 0;
     }
 
     /**
@@ -323,8 +353,8 @@ var XNAT = getObject(XNAT || {});
             } else {
                 props[normalized] = true;
             }
-            if (!isBuiltInProperty(property) && !CUSTOM_ROOT_PATTERN.test(property)) {
-                warnings.push('The custom property "' + property + '" does not start with a supported root element (xnat:imageScanData, xnat:mrScanData, xnat:petScanData, xnat:ctScanData, xnat:srScanData, xnat:imageSessionData, xnat:mrSessionData, xnat:petSessionData, xnat:ctSessionData, or xnat:subjectData).');
+            if (!hasPropertyOption(property) && !hasValidRoot(property)) {
+                warnings.push('The property "' + property + '" does not start with a supported root element (xnat:imageScanData, xnat:imageSessionData, xnat:subjectData, or a data type configured as a scan or session type for a modality).');
             }
         });
         if (pathCount !== 1) {
@@ -588,47 +618,48 @@ var XNAT = getObject(XNAT || {});
         var propertyCell = cell('min-width:220px;');
         var select = document.createElement('select');
         select.style.width = '95%';
-        csv.PROPERTY_OPTIONS.forEach(function(option) {
+        select.title = row.property || '';
+        csv.propertyOptions().forEach(function(option) {
             var el = document.createElement('option');
             el.value = option.value;
             el.textContent = option.label;
+            el.title = option.value;
             select.appendChild(el);
         });
+        // a stored property with no display mapping still has to render: give
+        // it an ad-hoc option labeled with the raw property path
+        if (!hasPropertyOption(row.property)) {
+            var adHoc = document.createElement('option');
+            adHoc.value = row.property;
+            adHoc.textContent = row.property;
+            select.appendChild(adHoc);
+        } else {
+            row.property = canonicalProperty(row.property);
+        }
         var customOption = document.createElement('option');
         customOption.value = CUSTOM_PROPERTY;
         customOption.textContent = 'Custom…';
         select.appendChild(customOption);
+        select.value = row.property;
 
-        var customInput = document.createElement('input');
-        customInput.type = 'text';
-        customInput.placeholder = 'e.g. xnat:mrScanData/parameters/tr';
-        customInput.style.cssText = 'width:95%;margin-top:4px;display:none;';
-
-        if (isBuiltInProperty(row.property)) {
-            row.property = canonicalProperty(row.property);
-            select.value = row.property;
-        } else {
-            select.value = CUSTOM_PROPERTY;
-            customInput.value = row.property;
-            customInput.style.display = 'block';
-        }
         select.addEventListener('change', function() {
             if (select.value === CUSTOM_PROPERTY) {
-                customInput.style.display = 'block';
-                row.property = customInput.value.trim();
-                customInput.focus();
-            } else {
-                customInput.style.display = 'none';
-                row.property = select.value;
+                // reset immediately so closing the dialog without saving
+                // leaves the row unchanged
+                select.value = row.property;
+                csv.showPropertyMappingDialog({
+                    onSaved: function(mapping) {
+                        row.property = mapping.property;
+                        editor.render();
+                    }
+                });
+                return;
             }
-            editor.sync();
-        });
-        customInput.addEventListener('input', function() {
-            row.property = customInput.value.trim();
+            row.property = select.value;
+            select.title = row.property;
             editor.sync();
         });
         propertyCell.appendChild(select);
-        propertyCell.appendChild(customInput);
 
         var requiredInput = document.createElement('input');
         requiredInput.type = 'checkbox';
@@ -679,6 +710,250 @@ var XNAT = getObject(XNAT || {});
             this.warningsEl.style.display = 'none';
         }
     };
+
+    /**
+     * Dialog for creating or editing a display-value -> object-property
+     * mapping. Validation is authoritative on the server; its error messages
+     * (duplicates with the currently configured mapping, unsupported roots)
+     * are shown inside the dialog.
+     *
+     * opts: { display, property, replaces, onSaved(mapping) }
+     */
+    csv.showPropertyMappingDialog = function(opts) {
+        opts = opts || {};
+        var content = document.createElement('div');
+
+        var errorEl = document.createElement('div');
+        errorEl.style.cssText = 'display:none;margin-bottom:10px;padding:6px 10px;border:1px solid #c66;background:#fbeeee;border-radius:3px;white-space:pre-wrap;';
+
+        function field(labelText, value, placeholder) {
+            var wrapper = document.createElement('div');
+            wrapper.style.marginBottom = '10px';
+            var label = document.createElement('label');
+            label.style.cssText = 'display:block;font-weight:bold;margin-bottom:3px;';
+            label.textContent = labelText;
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.value = value || '';
+            input.placeholder = placeholder || '';
+            input.style.cssText = 'width:100%;box-sizing:border-box;';
+            wrapper.appendChild(label);
+            wrapper.appendChild(input);
+            content.appendChild(wrapper);
+            return input;
+        }
+
+        content.appendChild(errorEl);
+        var displayInput  = field('Display Value', opts.display, 'e.g. Repetition Time');
+        var propertyInput = field('XFT Object Property', opts.property, 'e.g. xnat:mrScanData/parameters/tr');
+
+        var hint = document.createElement('div');
+        hint.className = 'description';
+        hint.textContent = 'The property must be a data type followed by a property path. Valid data types are '
+                         + 'xnat:imageScanData, xnat:imageSessionData, xnat:subjectData, or any data type configured '
+                         + 'as a scan or session type for a modality. Mappings are shared site-wide.';
+        content.appendChild(hint);
+
+        XNAT.dialog.open({
+            title: opts.replaces ? 'Edit Property Display Mapping' : 'New Property Display Mapping',
+            width: 520,
+            content: content,
+            buttons: [
+                {
+                    label: 'Save',
+                    isDefault: true,
+                    close: false,
+                    action: function(dialog) {
+                        var payload = {
+                            display: displayInput.value.trim(),
+                            property: propertyInput.value.trim()
+                        };
+                        XNAT.xhr.ajax({
+                            url: displayMappingsUrl() + (opts.replaces ? '?replaces=' + encodeURIComponent(opts.replaces) : ''),
+                            method: 'POST',
+                            contentType: 'application/json',
+                            data: JSON.stringify(payload),
+                            success: function() {
+                                dialog.close();
+                                notify('Property display mapping saved.');
+                                csv.refreshDisplayMappings(function() {
+                                    if (opts.onSaved) {
+                                        opts.onSaved(payload);
+                                    }
+                                });
+                            },
+                            fail: function(error) {
+                                errorEl.textContent = (error && error.responseText) || 'Unable to save the property display mapping.';
+                                errorEl.style.display = 'block';
+                            }
+                        });
+                    }
+                },
+                {
+                    label: 'Cancel',
+                    close: true
+                }
+            ]
+        });
+    };
+
+    /** Reloads the display mappings, then re-renders every dependent view. */
+    csv.refreshDisplayMappings = function(callback) {
+        XNAT.xhr.getJSON({
+            url: displayMappingsUrl(),
+            success: function(data) {
+                csv.displayMappings = Array.isArray(data) ? data : [];
+                Object.keys(csv.editors).forEach(function(scope) {
+                    csv.editors[scope].render();
+                });
+                csv.renderDisplayMappingsManager();
+                if (callback) {
+                    callback();
+                }
+            },
+            fail: function(error) {
+                console.error('Unable to load property display mappings', error);
+                if (callback) {
+                    callback();
+                }
+            }
+        });
+    };
+
+    /**
+     * The site-level Property Display Mappings management table: one row per
+     * mapping with Edit and Delete actions, plus an Add button. Renders into
+     * the container spawned by the Property Display Mappings tab; a no-op on
+     * pages without that container.
+     */
+    csv.renderDisplayMappingsManager = function() {
+        var container = document.getElementById(DISPLAY_TABLE_ID);
+        if (!container) {
+            return;
+        }
+        container.innerHTML = '';
+
+        var table = document.createElement('table');
+        table.className = 'xnat-table';
+        table.style.width = '100%';
+        table.innerHTML =
+            '<thead><tr>' +
+            '<th style="text-align:left;">Display Value</th>' +
+            '<th style="text-align:left;">XFT Object Property</th>' +
+            '<th style="width:80px;"></th>' +
+            '</tr></thead>';
+        var tbody = document.createElement('tbody');
+        table.appendChild(tbody);
+
+        (csv.displayMappings || []).forEach(function(mapping) {
+            var tr = document.createElement('tr');
+
+            var displayCell = document.createElement('td');
+            displayCell.textContent = mapping.display;
+            tr.appendChild(displayCell);
+
+            var propertyCell = document.createElement('td');
+            var code = document.createElement('code');
+            code.textContent = mapping.property;
+            propertyCell.appendChild(code);
+            tr.appendChild(propertyCell);
+
+            var actionsCell = document.createElement('td');
+            actionsCell.style.cssText = 'text-align:center;white-space:nowrap;';
+
+            var editButton = document.createElement('button');
+            editButton.type = 'button';
+            editButton.className = 'btn btn-sm';
+            editButton.title = 'Edit this mapping';
+            editButton.innerHTML = '<i class="fa fa-pencil"></i>';
+            editButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                csv.showPropertyMappingDialog({
+                    display:  mapping.display,
+                    property: mapping.property,
+                    replaces: mapping.display
+                });
+            });
+            actionsCell.appendChild(editButton);
+
+            var deleteButton = document.createElement('button');
+            deleteButton.type = 'button';
+            deleteButton.className = 'btn btn-sm';
+            deleteButton.title = 'Delete this mapping';
+            deleteButton.style.marginLeft = '6px';
+            deleteButton.innerHTML = '<i class="fa fa-trash"></i>';
+            deleteButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                XNAT.xhr.ajax({
+                    url: displayMappingsUrl() + '/' + encodeURIComponent(mapping.display),
+                    method: 'DELETE',
+                    success: function() {
+                        notify('Property display mapping deleted.');
+                        csv.refreshDisplayMappings();
+                    },
+                    fail: function(error) {
+                        xmodal.message('Error', 'Unable to delete the property display mapping'
+                                       + ((error && error.responseText) ? ': ' + error.responseText : '.'));
+                    }
+                });
+            });
+            actionsCell.appendChild(deleteButton);
+
+            tr.appendChild(actionsCell);
+            tbody.appendChild(tr);
+        });
+
+        var addButton = document.createElement('button');
+        addButton.type = 'button';
+        addButton.className = 'btn btn-sm';
+        addButton.style.marginTop = '8px';
+        addButton.textContent = 'Add Mapping';
+        addButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            csv.showPropertyMappingDialog({});
+        });
+
+        container.appendChild(table);
+        container.appendChild(addButton);
+    };
+
+    /**
+     * Loads the display mappings and the modality configuration (for soft root
+     * warnings) before the editors render. The callback fires once the display
+     * mappings request settles; a failed modalities request only disables the
+     * root warnings.
+     */
+    function loadReferenceData(callback) {
+        XNAT.xhr.getJSON({
+            url: modalitiesUrl(),
+            success: function(data) {
+                var roots = GENERIC_ROOTS.slice();
+                (Array.isArray(data) ? data : []).forEach(function(modality) {
+                    if (modality.scan) {
+                        roots.push(modality.scan.toLowerCase());
+                    }
+                    if (modality.session) {
+                        roots.push(modality.session.toLowerCase());
+                    }
+                });
+                csv.validRoots = roots;
+            },
+            fail: function(error) {
+                console.warn('Unable to load the modality configuration; property root warnings are disabled', error);
+            }
+        });
+        XNAT.xhr.getJSON({
+            url: displayMappingsUrl(),
+            success: function(data) {
+                csv.displayMappings = Array.isArray(data) ? data : [];
+                callback();
+            },
+            fail: function(error) {
+                console.error('Unable to load property display mappings', error);
+                callback();
+            }
+        });
+    }
 
     csv.editors = {};
 
@@ -793,9 +1068,18 @@ var XNAT = getObject(XNAT || {});
         });
     }
 
+    var initialized = false;
+
     csv.init = function() {
-        whenPresent(SITE_INPUT + '-table', function() { csv.loadSite(); });
-        whenPresent(PROJECT_INPUT + '-table', function() { csv.loadProject(); });
+        if (initialized) {
+            return;
+        }
+        initialized = true;
+        loadReferenceData(function() {
+            whenPresent(SITE_INPUT + '-table', function() { csv.loadSite(); });
+            whenPresent(PROJECT_INPUT + '-table', function() { csv.loadProject(); });
+            whenPresent(DISPLAY_TABLE_ID, function() { csv.renderDisplayMappingsManager(); });
+        });
     };
 
     csv.init();
