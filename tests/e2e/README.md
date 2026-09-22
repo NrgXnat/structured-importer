@@ -88,6 +88,9 @@ collection time.
 | `ui/uploaderPage.spec.ts` | 6 | The form's controls and the modality drop-down |
 | `ui/uploadThroughTheBrowser.spec.ts` | 4 | Directory and manifest archives uploaded through the real page |
 | `permissions/configApiAccess.spec.ts` | 5 | Configuration API gating and importing into an inaccessible project |
+| `permissions/projectOwner.spec.ts` | 2 | A project owner can import into their own project and not into another |
+| `validation/manifestFormat.spec.ts` | 6 | Manifest file formats: byte order mark, empty manifest, two CSVs, bad path, label rules |
+| `import/manifestFormatTolerance.spec.ts` | 4 | Quoted commas, Windows line endings, any `.csv` name, non-numeric scan IDs |
 
 ### Deliberately not covered
 
@@ -99,7 +102,7 @@ collection time.
 
 ## Known failures
 
-Two tests report red. They assert the behavior a user needs rather than the
+Four tests report red. They assert the behavior a user needs rather than the
 behavior observed, and each turns green by itself when the underlying issue is
 fixed. Both are marked `test.fail()`, so the suite exits clean until then and
 reports a failure the day the behavior changes.
@@ -107,6 +110,8 @@ reports a failure the day the behavior changes.
 | Test | Issue |
 |---|---|
 | `validation/uploadParameters.spec.ts`, an archive with no scan directories | Returns HTTP 200 with an empty body and creates nothing. The importer detects it and calls `failed()`, but that does not become a non-2xx response. |
+| `validation/manifestFormat.spec.ts`, a manifest with headers and no data rows | The same root cause reached through the manifest instead of the directory structure. |
+| `validation/manifestFormat.spec.ts`, a manifest saved with a byte order mark | The mark is read as part of the first column's name, so the import fails claiming a column is missing when it is present. Spreadsheet software writes these by default. |
 | `import/modalityDataType.spec.ts`, a modality offered for session creation | A modality with a session data type and no scan data type is offered in the uploader drop-down and then fails on an archive containing a scan of its own modality. |
 
 Errors raised by `validateParameters()` also reach the caller as a generic

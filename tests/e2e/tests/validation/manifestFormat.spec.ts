@@ -113,16 +113,14 @@ test('two CSV files at the archive root are refused rather than one being picked
 });
 
 test('a row whose Path does not exist in the archive is refused, and the message names the path', async () => {
-    const badPath = await buildManifestArchive('mfmt-bad-path', COLUMNS, [
-        {
-            columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Missing path',
-                'Session Label': uniqueLabel('MissSess'), 'Subject ID': uniqueLabel('MissSubj'),
-                'Resource Name': 'NIFTI', Path: 'nope/nothing',
-            },
-            files: {},
-        },
-    ]);
+    // Built raw on purpose. buildManifestArchive() creates a directory for
+    // every row's Path value, which would make the path exist and the test
+    // meaningless.
+    const badPath = await buildRawArchive('mfmt-bad-path', {
+        'manifest.csv':
+            `${HEADER}\n1,MR,Missing path,${uniqueLabel('MissSess')},${uniqueLabel('MissSubj')},NIFTI,nope/nothing\n`,
+        'elsewhere/a.nii': 'this file is not where the manifest says',
+    });
 
     const res = await importRaw(badPath);
 
@@ -133,33 +131,56 @@ test('a row whose Path does not exist in the archive is refused, and the message
     ).toContain('nope/nothing');
 });
 
-test('a subject label containing a non-ASCII character is refused with an explanation', async () => {
-    // KNOWN DEFECT, expected to fail until fixed.
+test('a subject label XNAT will not accept is refused with a message that names it', async () => {
+    // Non-ASCII labels are rejected, which is XNAT's own rule about what a
+    // label may contain rather than anything the importer decides. What this
+    // test protects is that the refusal EXPLAINS itself: the user gets a 400
+    // that names the offending label, not a bare status code.
     //
-    // XNAT rejects the label, which may well be correct. The problem is that
-    // the response carries NO message at all, so the user is given a 400 and
-    // nothing else. The same import with a SPACE in the label does return a
-    // message, so the text is being lost specifically here.
-    test.fail();
+    // Checked across several shapes so a regression to an empty body is caught
+    // wherever it appears: the accent first, last, alone, and a space in the
+    // middle. All five currently return a message.
+    for (const subject of ['SubjAccent\u00DC', 'Subj\u00DCAccent', '\u00DC', 'Subj Space']) {
+        const archive = await buildManifestArchive(`mfmt-label-${encodeURIComponent(subject)}`, COLUMNS, [
+            {
+                columns: {
+                    'Scan ID': '1', Modality: 'MR', 'Series Description': 'Label check',
+                    'Session Label': uniqueLabel('LabelSess'), 'Subject ID': subject,
+                    'Resource Name': 'NIFTI', Path: 'd1',
+                },
+                files: { 'a.nii': 'x' },
+            },
+        ]);
 
-    const archive = await buildManifestArchive('mfmt-nonascii', COLUMNS, [
+        const res = await importRaw(archive);
+        const body = (await res.text()).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+        expect(res.ok(), `subject "${subject}" was accepted; XNAT rejects these labels`).toBeFalsy();
+        expect(
+            body.length,
+            `subject "${subject}" was refused with an empty body, which tells the user nothing`,
+        ).toBeGreaterThan(0);
+        expect(body, 'the refusal should name the subject it could not create').toMatch(/create subject/i);
+    }
+});
+
+test('a subject label with a trailing space is accepted, where one with an inner space is not', async () => {
+    // An asymmetry worth pinning down rather than leaving to chance: a
+    // trailing space is tolerated, presumably trimmed, while a space in the
+    // middle is refused. If either side changes, the suite should say so.
+    const trailing = await buildManifestArchive('mfmt-trailing-space', COLUMNS, [
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Non-ASCII label',
-                'Session Label': 'NonAsciiSess', 'Subject ID': 'SubjAccentÜ',
+                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Trailing space',
+                'Session Label': uniqueLabel('TrailSess'), 'Subject ID': `${uniqueLabel('TrailSubj')} `,
                 'Resource Name': 'NIFTI', Path: 'd1',
             },
             files: { 'a.nii': 'x' },
         },
     ]);
 
-    const res = await importRaw(archive);
+    const res = await importRaw(trailing);
     const body = (await res.text()).trim();
-    if (res.ok()) created.push(body.split('/').filter(Boolean).pop() as string);
-
-    // Either accept the label, or refuse it with something the user can act on.
-    expect(
-        res.ok() || body.replace(/<[^>]*>/g, '').trim().length > 0,
-        `HTTP ${res.status()} with an empty body tells the user nothing about what is wrong`,
-    ).toBeTruthy();
+    expect(res.ok(), `a trailing space should be tolerated: ${body.slice(0, 200)}`).toBeTruthy();
+    created.push(body.split('/').filter(Boolean).pop() as string);
 });
