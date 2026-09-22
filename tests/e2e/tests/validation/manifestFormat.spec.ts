@@ -43,8 +43,6 @@ function importRaw(archive: string) {
 }
 
 test('a manifest saved with a byte order mark is read correctly', async () => {
-    // KNOWN DEFECT, expected to fail until fixed.
-    //
     // Saving as "CSV UTF-8" in Excel writes a byte order mark, and the mark is
     // read as part of the first column's name, so that column never matches.
     // The import then fails claiming a column is missing when it is plainly
@@ -52,8 +50,6 @@ test('a manifest saved with a byte order mark is read correctly', async () => {
     //
     // Measured: the manifest begins EF BB BF 53 63 61 6E ("Scan"), and the
     // import fails with `missing required column(s): [Scan ID]`.
-    test.fail();
-
     const session = uniqueLabel('BomSess');
     const withBom = await buildRawArchive('mfmt-bom', {
         'manifest.csv': `﻿${HEADER}\n1,MR,BOM scan,${session},${uniqueLabel('BomSubj')},NIFTI,d1\n`,
@@ -71,16 +67,10 @@ test('a manifest saved with a byte order mark is read correctly', async () => {
 });
 
 test('a manifest with headers and no data rows is refused rather than silently doing nothing', async () => {
-    // KNOWN DEFECT, expected to fail until fixed. Same root cause as the
-    // scanless directory archive in uploadParameters.spec.ts: the importer
-    // produces no sessions, logs "didn't find anything actionable", calls
-    // failed(), and still answers HTTP 200 with an empty body.
-    //
-    // Both halves are covered because a fix to one code path would not
-    // necessarily fix the other, and a user reaching this through a manifest
-    // sees exactly the same nothing.
-    test.fail();
-
+    // The manifest route to the same outcome as the scanless directory archive
+    // in uploadParameters.spec.ts. Both are covered because a fix to one code
+    // path would not necessarily fix the other, and a user reaching it through
+    // a manifest sees exactly the same nothing.
     const headersOnly = await buildRawArchive('mfmt-empty', {
         'manifest.csv': `${HEADER}\n`,
         'd1/a.nii': 'orphan payload',

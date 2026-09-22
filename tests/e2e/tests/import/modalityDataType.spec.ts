@@ -50,10 +50,10 @@ test('a modality that is not in the configuration is refused', async () => {
     });
 
     expect(res.ok(), 'an unconfigured modality must not create a session').toBeFalsy();
-    // This check lives in validateParameters(), so its message is discarded
-    // and the caller sees a generic 500. See the header of
-    // tests/validation/uploadParameters.spec.ts. Enable when that is fixed:
-    // expect(await res.text()).toContain('NOT_A_REAL_MODALITY');
+    expect(
+        await res.text(),
+        'the refusal must name the modality it did not recognize',
+    ).toContain('NOT_A_REAL_MODALITY');
 });
 
 test('the modality configuration is ordered by group and is free of duplicate modalities', async () => {
@@ -84,9 +84,6 @@ test('every advertised mapping names at least one data type, and names it plausi
 });
 
 test('a modality offered for session creation cannot fail on its own scans', async () => {
-    // KNOWN DEFECT, expected to fail until the mapping is completed.
-    test.fail();
-
     // A modality with a session type but no scan type is offered in the
     // uploader's primary-modality drop-down, because that list is filtered on
     // hasSessionDataType alone. Picking it works right up until the archive

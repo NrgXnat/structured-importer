@@ -139,8 +139,6 @@ test('the structured labeling controls belong to the structured handler, not the
 });
 
 test('selecting the structured handler persists without having to retry', async ({ page }) => {
-    // KNOWN DEFECT, expected to fail until fixed.
-    //
     // Every other test in this suite reaches the structured controls through
     // selectStructuredHandler(), which selects the handler and RETRIES until
     // the selection survives. That helper is necessary, because without it no
@@ -157,8 +155,6 @@ test('selecting the structured handler persists without having to retry', async 
     //
     // A person clicking will not notice, since that takes longer than the
     // window. Any automated caller hits it every time.
-    test.fail();
-
     await expect(page.locator('#primary-modality + .chosen-container')).toHaveCount(1);
     await page.locator('#import-handler').selectOption('Structured-Zip');
 

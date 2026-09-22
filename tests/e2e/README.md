@@ -99,23 +99,3 @@ collection time.
 - The archive extractor's path-traversal guard, which `ArchiveExtractorTest`
   covers directly. Building a malicious archive to re-prove it adds risk, not
   coverage.
-
-## Known failures
-
-Five tests report red. They assert the behavior a user needs rather than the
-behavior observed, and each turns green by itself when the underlying issue is
-fixed. Both are marked `test.fail()`, so the suite exits clean until then and
-reports a failure the day the behavior changes.
-
-| Test | Issue |
-|---|---|
-| `validation/uploadParameters.spec.ts`, an archive with no scan directories | Returns HTTP 200 with an empty body and creates nothing. The importer detects it and calls `failed()`, but that does not become a non-2xx response. |
-| `validation/manifestFormat.spec.ts`, a manifest with headers and no data rows | The same root cause reached through the manifest instead of the directory structure. |
-| `validation/manifestFormat.spec.ts`, a manifest saved with a byte order mark | The mark is read as part of the first column's name, so the import fails claiming a column is missing when it is present. Spreadsheet software writes these by default. |
-| `import/modalityDataType.spec.ts`, a modality offered for session creation | A modality with a session data type and no scan data type is offered in the uploader drop-down and then fails on an archive containing a scan of its own modality. |
-| `ui/uploaderPage.spec.ts`, selecting the structured handler persists | The page resets `#import-handler` to its default shortly after load, so a single selection does not survive. Every other browser test works around this via `selectStructuredHandler()`, which retries; this test exists so the behavior is visible rather than hidden by that helper. |
-
-Errors raised by `validateParameters()` also reach the caller as a generic
-HTTP 500 with the message discarded, so the affected specs assert refusal
-without asserting the message. Each carries a commented-out message assertion
-to enable once that is fixed.
