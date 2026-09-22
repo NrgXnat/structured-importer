@@ -1,23 +1,15 @@
 /**
- * Authenticates the accounts the suite needs, then measures what the target
- * instance can actually do.
+ * Authenticates the accounts the suite needs.
  *
- * Two different kinds of prerequisite are handled differently here, on purpose:
+ * The capability probe is NOT here. It runs in global.setup.ts, before
+ * Playwright collects any test file, because the modality matrix generates its
+ * tests at collection time from what the probe records. See that file for why
+ * a setup project cannot do that job.
  *
- *   - The Structured-Zip import handler is the code under test. If it is
- *     missing, the run FAILS. A suite that skipped would report green while
- *     covering nothing.
- *   - The configuration REST API is a feature level. It is on `develop` and
- *     has not reached `main` yet. The run fails by default when it is absent,
- *     so nobody tests main and thinks they covered the API, but
- *     TARGET_BRANCH=main switches that to a loud skip for running the importer
- *     coverage alone against an older build.
- *
- * What is measured is written to .auth/capabilities.json, which the
- * config-dependent specs read through lib/capabilities.ts. That is what lets
- * the same suite run unchanged against develop today and main after the merge.
+ * What remains here is the browser logins, which produce storage state that
+ * tests consume at run time and so have no collection-time dependency.
  */
-import { test as setup, expect, request as playwrightRequest } from '@playwright/test';
+import { test as setup, expect } from '@playwright/test';
 import * as fs from 'fs';
 import { login } from '../lib/auth';
 
@@ -34,7 +26,6 @@ const NON_ADMIN_PASS = process.env.NON_ADMIN_PASS || '';
  * at that point the API will be on main too and this variable can go away.
  */
 const TARGET_BRANCH = (process.env.TARGET_BRANCH ?? 'develop').toLowerCase();
-const REQUIRE_CONFIG_API = TARGET_BRANCH !== 'main';
 
 setup('authenticate as admin', async ({ page }) => {
     await login(page, ADMIN_USER, ADMIN_PASS, 'admin-csrf.txt');
@@ -59,71 +50,19 @@ setup('authenticate as non-admin', async ({ page }) => {
     await page.context().storageState({ path: '.auth/nonadmin.json' });
 });
 
-setup('target instance carries the structured importer features under test', async ({ baseURL }) => {
-    const ctx = await playwrightRequest.newContext({
-        baseURL,
-        storageState: '.auth/admin.json',
-        ignoreHTTPSErrors: true,
-    });
+setup('report what global setup measured', async () => {
+    // The capability probe itself runs in global.setup.ts, before collection,
+    // because the modality matrix needs its output at collection time. This
+    // test surfaces the result in the run output and fails if that file is
+    // missing, which would mean globalSetup did not run.
+    const raw = fs.readFileSync('.auth/capabilities.json', 'utf-8');
+    const capabilities = JSON.parse(raw) as { version: string; configApi: boolean };
 
-    const pluginRes = await ctx.get('/xapi/plugins/StructuredImporterPlugin');
-    expect(pluginRes.ok(), 'StructuredImporterPlugin is not installed on this instance').toBeTruthy();
-    const version = (await pluginRes.json()).version;
-    console.log(`[STRUCT-IMPORT-E2E] StructuredImporterPlugin version reported by the server: ${version}`);
-
-    // One endpoint per feature area, so a partial deployment is caught here
-    // rather than surfacing later as an unrelated-looking failure.
-    const probes: Array<[string, string]> = [
-        ['/xapi/structured-importer/modalities', 'modality-to-data-type configuration'],
-        ['/xapi/structured-importer/csv-column-mappings', 'site-wide CSV column mappings'],
-        ['/xapi/structured-importer/property-display-mappings', 'property display mappings'],
-    ];
-
-    const missing: string[] = [];
-    for (const [path, feature] of probes) {
-        const res = await ctx.get(path);
-        if (res.status() === 404) missing.push(`${feature} -> ${path}`);
-    }
-
-    fs.mkdirSync('.auth', { recursive: true });
-    fs.writeFileSync(
-        '.auth/capabilities.json',
-        JSON.stringify({ version, configApi: missing.length === 0 }),
-        'utf-8',
+    console.log(
+        `[STRUCT-IMPORT-E2E] StructuredImporterPlugin ${capabilities.version}, ` +
+            `configuration API ${capabilities.configApi ? 'present' : 'ABSENT'}, ` +
+            `TARGET_BRANCH=${TARGET_BRANCH}.`,
     );
 
-    // The modality matrix generates one named test per modality, which has to
-    // happen at collection time, before any test runs. Playwright cannot await
-    // an HTTP call there, so the configuration is written here and read
-    // synchronously by the spec. Re-fetched every run, so the matrix always
-    // reflects the instance under test rather than a checked-in copy.
-    if (missing.length === 0) {
-        const res = await ctx.get('/xapi/structured-importer/modalities');
-        if (res.ok()) {
-            const modalities = await res.json();
-            fs.writeFileSync('.auth/modalities.json', JSON.stringify(modalities), 'utf-8');
-            console.log(`[STRUCT-IMPORT-E2E] ${modalities.length} modalities recorded for the matrix.`);
-        }
-    }
-
-    await ctx.dispose();
-
-    if (missing.length > 0) {
-        const detail =
-            `This instance is running StructuredImporterPlugin ${version}, which does not expose:\n  ` +
-            missing.join('\n  ');
-
-        expect(
-            REQUIRE_CONFIG_API,
-            `${detail}\n\nThe configuration API is currently on the develop branch and has not ` +
-                `reached main. TARGET_BRANCH is "${TARGET_BRANCH}". Deploy a develop build, or ` +
-                'set TARGET_BRANCH=main to run the importer coverage alone and skip the ' +
-                'configuration tests.',
-        ).toBeFalsy();
-
-        console.log(
-            `[STRUCT-IMPORT-E2E] Configuration API absent on ${version}. ` +
-                `TARGET_BRANCH=${TARGET_BRANCH}, so the api project and the config-dependent tests will SKIP.`,
-        );
-    }
+    expect(capabilities.version, 'globalSetup did not record a plugin version').toBeTruthy();
 });

@@ -12,6 +12,12 @@ const NON_ADMIN_STATE = path.resolve(__dirname, '.auth/nonadmin.json');
 export default defineConfig({
     testDir: './tests',
 
+    // Runs before Playwright collects any test file. The modality matrix
+    // generates its tests at collection time from a file written here, so this
+    // cannot be a setup PROJECT: a project runs after collection. See
+    // global.setup.ts.
+    globalSetup: require.resolve('./global.setup.ts'),
+
     // An import extracts an archive, creates a subject, a session and its
     // scans, then writes the files into the archive. On a loaded server that
     // is comfortably slower than a plain REST call.
