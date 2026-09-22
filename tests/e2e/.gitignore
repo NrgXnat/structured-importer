@@ -3,3 +3,8 @@ node_modules/
 .auth/
 test-results/
 playwright-report/
+
+# The repository root .gitignore excludes `lib/` (a Java build convention),
+# which also matches this suite's TypeScript helper directory and silently
+# drops it from every commit. Re-include it explicitly.
+!lib/
