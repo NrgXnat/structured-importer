@@ -137,3 +137,38 @@ test('the structured labeling controls belong to the structured handler, not the
     await expect(page.locator('#structured-subject-labeling')).toBeVisible();
     await expect(page.locator('#subject-labeling'), 'the DICOM labeling row must be unaffected').toBeHidden();
 });
+
+test('selecting the structured handler persists without having to retry', async ({ page }) => {
+    // KNOWN DEFECT, expected to fail until fixed.
+    //
+    // Every other test in this suite reaches the structured controls through
+    // selectStructuredHandler(), which selects the handler and RETRIES until
+    // the selection survives. That helper is necessary, because without it no
+    // browser test can get past the first step. It also completely hides the
+    // behavior it is working around, which is why this test exists: it selects
+    // the handler once, the way a caller reasonably would, and asserts the
+    // selection is still there a moment later.
+    //
+    // Measured on the deployed build: the page finishes initializing after the
+    // load event and that late initialization resets #import-handler to its
+    // default, hiding the structured rows with it.
+    //   t+0    #import-handler = Structured-Zip, modality row visible
+    //   t+150  #import-handler = DICOM-zip,      modality row hidden
+    //
+    // A person clicking will not notice, since that takes longer than the
+    // window. Any automated caller hits it every time.
+    test.fail();
+
+    await expect(page.locator('#primary-modality + .chosen-container')).toHaveCount(1);
+    await page.locator('#import-handler').selectOption('Structured-Zip');
+
+    // Long enough to outlast the reset observed at ~150ms, short enough that a
+    // passing run stays quick once this is fixed.
+    await page.waitForTimeout(500);
+
+    await expect(
+        page.locator('#import-handler'),
+        'the handler selection was reset by the page after it was made',
+    ).toHaveValue('Structured-Zip');
+    await expect(page.locator('#structured-primary-modality')).toBeVisible();
+});

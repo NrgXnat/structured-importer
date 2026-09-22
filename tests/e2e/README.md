@@ -85,7 +85,7 @@ collection time.
 | `api/siteCsvMappings.spec.ts` | 4 | Site-wide mappings, defaults and round trips |
 | `validation/uploadParameters.spec.ts` | 6 | Missing and bad parameters, unsupported formats, empty archives |
 | `validation/manifestAndLabeling.spec.ts` | 6 | Manifest refusals and custom labeling precedence |
-| `ui/uploaderPage.spec.ts` | 6 | The form's controls and the modality drop-down |
+| `ui/uploaderPage.spec.ts` | 7 | The form's controls and the modality drop-down |
 | `ui/uploadThroughTheBrowser.spec.ts` | 4 | Directory and manifest archives uploaded through the real page |
 | `permissions/configApiAccess.spec.ts` | 5 | Configuration API gating and importing into an inaccessible project |
 | `permissions/projectOwner.spec.ts` | 2 | A project owner can import into their own project and not into another |
@@ -102,7 +102,7 @@ collection time.
 
 ## Known failures
 
-Four tests report red. They assert the behavior a user needs rather than the
+Five tests report red. They assert the behavior a user needs rather than the
 behavior observed, and each turns green by itself when the underlying issue is
 fixed. Both are marked `test.fail()`, so the suite exits clean until then and
 reports a failure the day the behavior changes.
@@ -113,6 +113,7 @@ reports a failure the day the behavior changes.
 | `validation/manifestFormat.spec.ts`, a manifest with headers and no data rows | The same root cause reached through the manifest instead of the directory structure. |
 | `validation/manifestFormat.spec.ts`, a manifest saved with a byte order mark | The mark is read as part of the first column's name, so the import fails claiming a column is missing when it is present. Spreadsheet software writes these by default. |
 | `import/modalityDataType.spec.ts`, a modality offered for session creation | A modality with a session data type and no scan data type is offered in the uploader drop-down and then fails on an archive containing a scan of its own modality. |
+| `ui/uploaderPage.spec.ts`, selecting the structured handler persists | The page resets `#import-handler` to its default shortly after load, so a single selection does not survive. Every other browser test works around this via `selectStructuredHandler()`, which retries; this test exists so the behavior is visible rather than hidden by that helper. |
 
 Errors raised by `validateParameters()` also reach the caller as a generic
 HTTP 500 with the message discarded, so the affected specs assert refusal
