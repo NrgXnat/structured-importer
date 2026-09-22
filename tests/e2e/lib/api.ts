@@ -297,6 +297,21 @@ export class StructuredImporterApi {
         expect(res.ok(), `Create project ${projectId} failed: HTTP ${res.status()} ${await res.text()}`).toBeTruthy();
     }
 
+    /**
+     * Adds a user to a project group. `group` is XNAT's group label, so
+     * "Owners", "Members" or "Collaborators".
+     */
+    async addProjectMember(projectId: string, username: string, group: string): Promise<void> {
+        const res = await this.request.put(
+            `/data/projects/${encodeURIComponent(projectId)}/users/${encodeURIComponent(group)}/${encodeURIComponent(username)}`,
+            { headers: this.headers() },
+        );
+        expect(
+            res.ok(),
+            `Add ${username} to ${group} of ${projectId} failed: HTTP ${res.status()} ${await res.text()}`,
+        ).toBeTruthy();
+    }
+
     async deleteProject(projectId: string): Promise<void> {
         const res = await this.request.delete(`/data/projects/${encodeURIComponent(projectId)}`, {
             headers: this.headers(),

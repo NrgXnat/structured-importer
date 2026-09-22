@@ -14,7 +14,7 @@
  */
 import { test, expect } from '../../lib/fixtures';
 import { StructuredImporterApi, RESOURCE_IDENTIFIER } from '../../lib/api';
-import { buildDirectoryArchive, cleanupArchives } from '../../lib/archive';
+import { buildDirectoryArchive, buildRawArchive, cleanupArchives } from '../../lib/archive';
 import { XNAT_URL, projectNameFor, uniqueLabel, OWNS_PROJECT } from '../../lib/env';
 
 const PROJECT = projectNameFor('dir');
@@ -133,4 +133,75 @@ test('two scans each keep their own files rather than sharing one resource', asy
 
     expect((await api.getScanResourceFiles(experimentId, '1', 'NIFTI')).map(f => f.Name)).toEqual(['one.nii']);
     expect((await api.getScanResourceFiles(experimentId, '2', 'NIFTI')).map(f => f.Name)).toEqual(['two.nii']);
+});
+
+test('directories nested inside a resource are preserved rather than flattened', async () => {
+    // Everything below the resource directory is content of that resource, so
+    // a file two levels down must arrive AND keep its relative path. A
+    // flattening bug would still produce a green "the file arrived" check,
+    // which is why the path is asserted rather than just the name.
+    const archive = await buildRawArchive('dir-nested', {
+        '1/MR/NIFTI/top.nii': 'top level',
+        '1/MR/NIFTI/sub/deeper/deep.nii': 'two levels down',
+    });
+
+    const experimentId = await api.importArchive(archive, {
+        project: PROJECT,
+        subject: uniqueLabel('DirSubjNest'),
+        session: uniqueLabel('DirSessNest'),
+        'primary-modality': 'MR',
+        resourceIdentifier: RESOURCE_IDENTIFIER.SIMPLE,
+    });
+    created.push(experimentId);
+
+    const files = await api.getScanResourceFiles(experimentId, '1', 'NIFTI');
+    const paths = files.map(f => f.URI.split('/files/').pop());
+    expect(paths.sort(), 'the nested path must be preserved inside the resource')
+        .toEqual(['sub/deeper/deep.nii', 'top.nii']);
+});
+
+test('a file sitting at the archive root does not prevent the scan directories importing', async () => {
+    // Zips routinely pick up a readme, a checksum file or a .DS_Store at the
+    // top level. That must not be mistaken for a scan directory or abort the
+    // import.
+    const archive = await buildRawArchive('dir-stray', {
+        'readme.txt': 'notes about this dataset',
+        '1/MR/NIFTI/a.nii': 'real payload',
+    });
+
+    const experimentId = await api.importArchive(archive, {
+        project: PROJECT,
+        subject: uniqueLabel('DirSubjStray'),
+        session: uniqueLabel('DirSessStray'),
+        'primary-modality': 'MR',
+        resourceIdentifier: RESOURCE_IDENTIFIER.SIMPLE,
+    });
+    created.push(experimentId);
+
+    const scans = await api.getScans(experimentId);
+    expect(scans.map(s => s.ID), 'the stray root file must not become a scan').toEqual(['1']);
+});
+
+test('an archive with twenty scans imports all of them', async () => {
+    // Everything else in the suite uses one or two scans. This is the only
+    // check that per-scan work scales and that nothing truncates a larger
+    // archive partway through.
+    const entries: Record<string, string> = {};
+    for (let i = 1; i <= 20; i++) {
+        entries[`${i}/MR/NIFTI/scan${i}.nii`] = `payload for scan ${i}`;
+    }
+    const archive = await buildRawArchive('dir-twenty', entries);
+
+    const experimentId = await api.importArchive(archive, {
+        project: PROJECT,
+        subject: uniqueLabel('DirSubjMany'),
+        session: uniqueLabel('DirSessMany'),
+        'primary-modality': 'MR',
+        resourceIdentifier: RESOURCE_IDENTIFIER.SIMPLE,
+    });
+    created.push(experimentId);
+
+    const scans = await api.getScans(experimentId);
+    expect(scans, 'all twenty scan directories must become scans').toHaveLength(20);
+    expect(scans.map(s => s.ID).sort((a, b) => Number(a) - Number(b))[19]).toBe('20');
 });
