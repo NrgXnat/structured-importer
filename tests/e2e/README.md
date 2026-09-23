@@ -80,6 +80,7 @@ collection time.
 | `import/directoryRis.spec.ts` | 4 | Directory archives becoming sessions, scans, resources and files |
 | `import/modalityDataType.spec.ts` | 4 | Modality configuration shape, ordering and completeness |
 | `import/csvRis.spec.ts` | 3 | Every mapped manifest column reaching its XNAT property |
+| `import/duplicateScanIds.spec.ts` | 2 | Two manifest rows naming the same scan: combining resources when the modality agrees, refusing the import when it does not |
 | `api/propertyDisplayMappings.spec.ts` | 8 | The property drop-down: add, rename, delete, one-display-per-property |
 | `api/projectCsvMappings.spec.ts` | 5 | Project overrides stored and scoped independently of the site set |
 | `api/siteCsvMappings.spec.ts` | 4 | Site-wide mappings, defaults and round trips |

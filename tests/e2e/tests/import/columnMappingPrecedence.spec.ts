@@ -64,7 +64,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
     await api.clearProjectColumnMappings(PROJECT);
     for (const id of new Set(created)) await api.deleteExperimentQuietly(id);
-    if (OWNS_PROJECT) await api.deleteProject(PROJECT);
+    if (OWNS_PROJECT) await api.deleteProjectQuietly(PROJECT);
     cleanupArchives();
     await api.dispose();
 });
@@ -204,7 +204,7 @@ test('a project mapping does not govern imports into a different project', async
         await api.deleteExperimentQuietly(body.split('/').filter(Boolean).pop() as string);
     } finally {
         await api.clearProjectColumnMappings(other);
-        if (OWNS_PROJECT) await api.deleteProject(other);
+        if (OWNS_PROJECT) await api.deleteProjectQuietly(other);
     }
 });
 

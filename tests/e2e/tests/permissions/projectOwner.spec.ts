@@ -43,8 +43,8 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-    await admin.deleteProject(OWNED);
-    await admin.deleteProject(FOREIGN);
+    await admin.deleteProjectQuietly(OWNED);
+    await admin.deleteProjectQuietly(FOREIGN);
     cleanupArchives();
     await user.dispose();
     await admin.dispose();

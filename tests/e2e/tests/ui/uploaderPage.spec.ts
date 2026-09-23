@@ -34,7 +34,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-    if (OWNS_PROJECT) await api.deleteProject(PROJECT);
+    if (OWNS_PROJECT) await api.deleteProjectQuietly(PROJECT);
     await api.dispose();
 });
 

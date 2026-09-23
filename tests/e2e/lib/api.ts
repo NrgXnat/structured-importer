@@ -323,6 +323,26 @@ export class StructuredImporterApi {
     }
 
     /**
+     * Teardown-safe project delete. A project can legitimately refuse to go
+     * away when something inside it is in a state XNAT will not remove, and
+     * that must not turn a passing test red. The status is reported so a
+     * genuine leak is still visible in the output.
+     */
+    async deleteProjectQuietly(projectId: string): Promise<void> {
+        try {
+            const res = await this.request.delete(`/data/projects/${encodeURIComponent(projectId)}`, {
+                headers: this.headers(),
+                params: { removeFiles: 'true', event_reason: 'structured importer e2e cleanup' },
+            });
+            if (!res.ok() && res.status() !== 404) {
+                console.warn(`[cleanup] could not delete project ${projectId}: HTTP ${res.status()}`);
+            }
+        } catch (e) {
+            console.warn(`[cleanup] error deleting project ${projectId}: ${String(e)}`);
+        }
+    }
+
+    /**
      * Teardown-safe delete. A cleanup failure must not fail the test that just
      * passed, and the ids collected during a run can contain duplicates or
      * experiments a later test already removed. The status is reported so a

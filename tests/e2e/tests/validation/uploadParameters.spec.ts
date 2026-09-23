@@ -29,7 +29,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-    if (OWNS_PROJECT) await api.deleteProject(PROJECT);
+    if (OWNS_PROJECT) await api.deleteProjectQuietly(PROJECT);
     cleanupArchives();
     await api.dispose();
 });

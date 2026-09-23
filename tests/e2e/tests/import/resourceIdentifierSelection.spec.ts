@@ -36,7 +36,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
     for (const id of new Set(created)) await api.deleteExperimentQuietly(id);
-    if (OWNS_PROJECT) await api.deleteProject(PROJECT);
+    if (OWNS_PROJECT) await api.deleteProjectQuietly(PROJECT);
     cleanupArchives();
     await api.dispose();
 });

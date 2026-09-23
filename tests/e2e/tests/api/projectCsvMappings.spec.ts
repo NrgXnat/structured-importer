@@ -39,7 +39,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
     await api.clearProjectColumnMappings(PROJECT);
-    if (OWNS_PROJECT) await api.deleteProject(PROJECT);
+    if (OWNS_PROJECT) await api.deleteProjectQuietly(PROJECT);
     await api.dispose();
 });
 
@@ -101,6 +101,6 @@ test('an override on one project does not affect another project', async () => {
         expect(otherMappings, 'project configuration must be scoped to its own project').toHaveLength(0);
     } finally {
         await api.clearProjectColumnMappings(other);
-        if (OWNS_PROJECT) await api.deleteProject(other);
+        if (OWNS_PROJECT) await api.deleteProjectQuietly(other);
     }
 });
