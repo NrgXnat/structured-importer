@@ -1,33 +1,22 @@
 /**
- * Importing the way a user actually does it: through the upload form.
+ * Importing through the upload form.
  *
- * It is tempting to argue that a browser upload reaches the same handler the
- * API specs already drive, so testing it again buys nothing. That reasoning is
- * wrong, and it is worth being explicit about why.
+ * The API specs prove the importer is correct; these prove a user can reach
+ * it. Everything before the handler differs: the form decides which parameters
+ * are sent at all, through disabled attributes, hidden rows and client-side
+ * validation, and the modality control is a Chosen widget rather than the
+ * native select the API sees.
  *
- * Everything BEFORE the handler is different. The form decides which
- * parameters are sent at all, and it decides that through disabled attributes,
- * hidden rows, radio handlers and a client-side validateForm(). A field that
- * is enabled in the DOM but sits in a hidden row still posts its value; a
- * field that is visible but disabled posts nothing. Neither condition is
- * visible from the API. The modality control is not even the native select the
- * API sees: the page runs the Chosen widget over it.
- *
- * So the API specs prove the importer is correct, and these specs prove the
- * user can reach it. A plugin can pass every unit test and every API test and
- * still be unusable, and that gap is exactly what this file covers.
- *
- * These tests assert on what ends up IN XNAT after the form submits, not on a
- * success banner. A banner is a claim; the archived session is the fact.
+ * Each test asserts on what ends up in XNAT, not on a success banner.
  */
 import { test, expect } from '../../lib/fixtures';
 import { StructuredImporterApi } from '../../lib/api';
 import { buildDirectoryArchive, buildManifestArchive, cleanupArchives } from '../../lib/archive';
 import { selectStructuredHandler, chooseModality } from '../../lib/uploaderPage';
+import { COLUMNS } from '../../lib/manifest';
 import { XNAT_URL, projectNameFor, uniqueLabel, OWNS_PROJECT } from '../../lib/env';
 
 const PROJECT = projectNameFor('uiup');
-const SITE_COLUMNS = ['Scan ID', 'Modality', 'Series Description', 'Session Label', 'Subject ID', 'Resource Name', 'Path'];
 
 let api: StructuredImporterApi;
 const created: string[] = [];
@@ -108,7 +97,7 @@ test('a manifest archive uploaded through the form applies its metadata', async 
     const subject = uniqueLabel('UiCsvSubj');
     const session = uniqueLabel('UiCsvSess');
 
-    const archive = await buildManifestArchive('uiup-csv', SITE_COLUMNS, [
+    const archive = await buildManifestArchive('uiup-csv', COLUMNS, [
         {
             columns: {
                 'Scan ID': '1', Modality: 'MR', 'Series Description': 'Uploaded through the browser',

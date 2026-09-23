@@ -14,24 +14,14 @@
 import { test, expect } from '../../lib/fixtures';
 import { StructuredImporterApi, RESOURCE_IDENTIFIER } from '../../lib/api';
 import { buildManifestArchive, cleanupArchives } from '../../lib/archive';
+import { COLUMNS, OPTIONAL_COLUMNS } from '../../lib/manifest';
 import { XNAT_URL, projectNameFor, uniqueLabel, OWNS_PROJECT } from '../../lib/env';
 
 const PROJECT = projectNameFor('csv');
 
-// The column headers of the default site-wide mapping. api/siteCsvMappings
-// asserts these ARE the defaults; here they are simply used.
-const COLUMNS = [
-    'Scan ID',
-    'Modality',
-    'Series Description',
-    'Session Label',
-    'Subject ID',
-    'Start Date',
-    'Start Time',
-    'Subject Weight (g)',
-    'Resource Name',
-    'Path',
-];
+// Every column the default site mapping defines, so this spec can assert the
+// optional ones reach their properties too.
+const ALL_COLUMNS = [...COLUMNS.slice(0, 5), ...OPTIONAL_COLUMNS, ...COLUMNS.slice(5)];
 
 let api: StructuredImporterApi;
 const created: string[] = [];
@@ -52,7 +42,7 @@ test('every mapped manifest column reaches the XNAT property it is mapped to', a
     const subject = uniqueLabel('CsvSubj');
     const session = uniqueLabel('CsvSess');
 
-    const archive = await buildManifestArchive('csv-full', COLUMNS, [
+    const archive = await buildManifestArchive('csv-full', ALL_COLUMNS, [
         {
             columns: {
                 'Scan ID': '1',
@@ -121,7 +111,7 @@ test('the Resource Name column names the resource, and the Path column selects i
     const session = uniqueLabel('CsvSessRes');
     const subject = uniqueLabel('CsvSubjRes');
 
-    const archive = await buildManifestArchive('csv-resource', COLUMNS, [
+    const archive = await buildManifestArchive('csv-resource', ALL_COLUMNS, [
         {
             columns: {
                 'Scan ID': '1', Modality: 'MR', 'Series Description': 'With resource name',
@@ -152,7 +142,7 @@ test('one manifest describing two sessions creates both, not just the first row'
     const sessionA = uniqueLabel('CsvSessA');
     const sessionB = uniqueLabel('CsvSessB');
 
-    const archive = await buildManifestArchive('csv-two-sessions', COLUMNS, [
+    const archive = await buildManifestArchive('csv-two-sessions', ALL_COLUMNS, [
         {
             columns: {
                 'Scan ID': '1', Modality: 'MR', 'Series Description': 'Session A scan',

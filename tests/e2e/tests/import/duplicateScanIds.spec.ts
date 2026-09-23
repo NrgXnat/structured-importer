@@ -19,10 +19,10 @@
 import { test, expect } from '../../lib/fixtures';
 import { StructuredImporterApi, RESOURCE_IDENTIFIER } from '../../lib/api';
 import { buildManifestArchive, cleanupArchives } from '../../lib/archive';
+import { COLUMNS } from '../../lib/manifest';
 import { XNAT_URL, projectNameFor, uniqueLabel, OWNS_PROJECT } from '../../lib/env';
 
 const PROJECT = projectNameFor('dupscan');
-const COLUMNS = ['Scan ID', 'Modality', 'Series Description', 'Session Label', 'Subject ID', 'Resource Name', 'Path'];
 
 let api: StructuredImporterApi;
 const created: string[] = [];

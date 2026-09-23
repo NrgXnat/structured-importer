@@ -1,34 +1,20 @@
 /**
- * Which column-mapping document actually governs an import.
+ * Which column-mapping document governs an import.
  *
- * This is the one thing the configuration API can never tell us. The endpoints
- * happily echo back whatever was stored; whether the IMPORTER reads the
- * project document or the site document is a separate question, and it is the
- * entire point of per-project mappings.
+ * The configuration endpoints echo back whatever was stored; whether the
+ * importer reads the project document or the site one is a separate question,
+ * and it is the entire point of per-project mappings. Resolution is project
+ * scope if present and enabled, then site scope, then the built-in defaults.
  *
- * Resolution, from DefaultCsvImportConfigService.getColumnMappings(user, projectId):
- *
- *   1. Project scope, if a configuration exists there AND is not disabled
- *   2. Site scope
- *   3. Failing both, create and use the built-in defaults
- *
- * A disabled configuration reads back as null, which is why disabling falls
- * through to the site document rather than leaving the project with nothing.
- *
- * Every test here is falsifiable in both directions, because a one-sided test
- * proves nothing. The project mapping renames every column to a PROJ_ prefix,
- * so:
- *
- *   - a PROJ_ manifest importing proves the PROJECT document was used
- *   - a site-worded manifest FAILING proves the site document was not
- *
- * If the importer ignored project mappings entirely, the first test would
- * fail. If it merged the two documents instead of choosing one, the second
- * would.
+ * The project mapping here renames every column to a PROJ_ prefix, so each
+ * case is falsifiable in both directions: a PROJ_ manifest importing proves
+ * the project document was used, and a site-worded manifest failing proves the
+ * site document was not.
  */
 import { test, expect } from '../../lib/fixtures';
 import { StructuredImporterApi, ColumnMapping, RESOURCE_IDENTIFIER } from '../../lib/api';
 import { buildManifestArchive, cleanupArchives } from '../../lib/archive';
+import { COLUMNS } from '../../lib/manifest';
 import { XNAT_URL, projectNameFor, uniqueLabel, OWNS_PROJECT } from '../../lib/env';
 import { hasConfigApi, pluginVersion } from '../../lib/capabilities';
 
@@ -51,7 +37,6 @@ const PROJECT_MAPPINGS: ColumnMapping[] = [
 ];
 
 const PROJECT_COLUMNS = PROJECT_MAPPINGS.map(m => m.column);
-const SITE_COLUMNS = ['Scan ID', 'Modality', 'Series Description', 'Session Label', 'Subject ID', 'Resource Name', 'Path'];
 
 let api: StructuredImporterApi;
 const created: string[] = [];
@@ -84,7 +69,7 @@ async function projectManifest(name: string, session: string, subject: string): 
 
 /** The same data, worded for the site mapping. */
 async function siteManifest(name: string, session: string, subject: string): Promise<string> {
-    return buildManifestArchive(name, SITE_COLUMNS, [
+    return buildManifestArchive(name, COLUMNS, [
         {
             columns: {
                 'Scan ID': '1', Modality: 'MR', 'Series Description': 'Site mapped scan',

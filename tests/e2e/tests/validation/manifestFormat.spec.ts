@@ -12,12 +12,10 @@
 import { test, expect } from '../../lib/fixtures';
 import { StructuredImporterApi, RESOURCE_IDENTIFIER } from '../../lib/api';
 import { buildManifestArchive, buildRawArchive, cleanupArchives } from '../../lib/archive';
+import { COLUMNS, HEADER } from '../../lib/manifest';
 import { XNAT_URL, projectNameFor, uniqueLabel, OWNS_PROJECT } from '../../lib/env';
 
 const PROJECT = projectNameFor('mfmt');
-const COLUMNS = ['Scan ID', 'Modality', 'Series Description', 'Session Label', 'Subject ID', 'Resource Name', 'Path'];
-
-const HEADER = COLUMNS.join(',');
 
 let api: StructuredImporterApi;
 const created: string[] = [];

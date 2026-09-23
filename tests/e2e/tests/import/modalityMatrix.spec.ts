@@ -1,30 +1,16 @@
 /**
  * Every configured modality, imported for real.
  *
- * The modality drop-down is the largest set of choices a user is offered
- * anywhere in this plugin, and an earlier version of this suite exercised
- * three of them. Three out of thirty-nine is a sample, not coverage, and the
- * defects already found in this area were in modalities nobody had tried.
+ * One named test per modality, so a failure says which one. The list is read
+ * from a file global setup writes, because Playwright collects tests
+ * synchronously and cannot await an HTTP call to build them.
  *
- * This file generates ONE NAMED TEST PER MODALITY, so a failure says
- * "modality NM" rather than "the modality loop failed on iteration 14". The
- * list is read from a file global setup writes, because Playwright collects
- * tests synchronously and cannot await an HTTP call to build them.
+ * Two shapes, because the halves of a mapping are used independently: a
+ * session of modality M holding a scan of M, and scan-only modalities tested
+ * inside an MR session, which is the only way they can be used.
  *
- * Two shapes are covered, because the two halves of a mapping are used
- * independently:
- *
- *   - Both halves: session of modality M holding a scan of modality M. This is
- *     the ordinary case and is what the drop-down promises.
- *   - Scan-only modalities: they have no session type, so they are tested as a
- *     scan inside an MR session, which is the only way they can be used.
- *
- * Session-only modalities are covered in modalityDataType.spec.ts as a known
- * defect and are not repeated here.
- *
- * Every test asserts the data types the API ADVERTISED, so the suite checks
- * the plugin against its own published configuration rather than against a
- * list we copied.
+ * Expectations come from the data types the API advertises, so the plugin is
+ * checked against its own configuration rather than a copied list.
  */
 import { test, expect } from '../../lib/fixtures';
 import { StructuredImporterApi, RESOURCE_IDENTIFIER } from '../../lib/api';

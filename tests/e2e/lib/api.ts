@@ -312,16 +312,6 @@ export class StructuredImporterApi {
         ).toBeTruthy();
     }
 
-    async deleteProject(projectId: string): Promise<void> {
-        const res = await this.request.delete(`/data/projects/${encodeURIComponent(projectId)}`, {
-            headers: this.headers(),
-            params: { removeFiles: 'true', event_reason: 'structured importer e2e cleanup' },
-        });
-        if (res.status() !== 404) {
-            expect(res.ok(), `Delete project ${projectId} failed: HTTP ${res.status()}`).toBeTruthy();
-        }
-    }
-
     /**
      * Teardown-safe project delete. A project can legitimately refuse to go
      * away when something inside it is in a state XNAT will not remove, and
@@ -362,15 +352,6 @@ export class StructuredImporterApi {
         }
     }
 
-    async deleteExperiment(experimentId: string): Promise<void> {
-        const res = await this.request.delete(`/data/experiments/${encodeURIComponent(experimentId)}`, {
-            headers: this.headers(),
-            params: { removeFiles: 'true' },
-        });
-        if (res.status() !== 404) {
-            expect(res.ok(), `Delete experiment ${experimentId} failed: HTTP ${res.status()}`).toBeTruthy();
-        }
-    }
 }
 
 /**

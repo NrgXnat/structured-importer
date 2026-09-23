@@ -1,10 +1,9 @@
 /**
  * Environment-derived settings shared by every spec.
  *
- * The suite creates and deletes its own project by default so it never touches
- * data it did not make. Point TEST_PROJECT at an existing project only when
- * the account under test cannot create projects; in that case the suite
- * deletes the sessions it created but leaves the project alone.
+ * Each spec creates and deletes its own project by default, so the suite never
+ * touches data it did not make. Set TEST_PROJECT to reuse an existing project
+ * when the account cannot create them.
  */
 export const XNAT_URL = process.env.XNAT_URL || 'http://localhost';
 
@@ -13,10 +12,6 @@ export const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 /** Empty when the instance has no second account; the permissions project then skips. */
 export const NON_ADMIN_USER = process.env.NON_ADMIN_USER || '';
 
-/**
- * When set, the suite uses this project and does not delete it. When unset,
- * each spec file creates a uniquely named project and removes it afterwards.
- */
 export const TEST_PROJECT = process.env.TEST_PROJECT || '';
 
 /** True when the suite owns (and must clean up) the project it uses. */
