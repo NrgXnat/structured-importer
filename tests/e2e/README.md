@@ -37,6 +37,18 @@ cp .env.example .env
 | `TARGET_BRANCH` | `develop` (default) or `main`. On `develop` the configuration API is required and its absence fails the run. |
 | `TEST_PROJECT` | Optional. By default each spec file creates a uniquely named project and deletes it afterwards. |
 
+## Checks
+
+```bash
+npm run lint             # eslint, including the Playwright rules
+npm run format:check     # prettier
+npx tsc --noEmit         # types
+```
+
+`npm run lint:fix` and `npm run format` apply what they can. Markdown is
+excluded from Prettier deliberately: it pads table columns, which turns every
+later edit into a large diff.
+
 ## Running
 
 ```bash

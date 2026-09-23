@@ -66,7 +66,11 @@ export class StructuredImporterApi {
         private csrfToken: string,
     ) {}
 
-    static async create(csrfFile: string, storageStatePath: string, baseURL: string): Promise<StructuredImporterApi> {
+    static async create(
+        csrfFile: string,
+        storageStatePath: string,
+        baseURL: string,
+    ): Promise<StructuredImporterApi> {
         const ctx = await playwrightRequest.newContext({
             baseURL,
             storageState: storageStatePath,
@@ -158,25 +162,36 @@ export class StructuredImporterApi {
 
     async setSiteColumnMappings(mappings: ColumnMapping[]): Promise<void> {
         const res = await this.setSiteColumnMappingsRaw(mappings);
-        expect(res.ok(), `POST site column mappings failed: HTTP ${res.status()} ${await res.text()}`).toBeTruthy();
+        expect(
+            res.ok(),
+            `POST site column mappings failed: HTTP ${res.status()} ${await res.text()}`,
+        ).toBeTruthy();
     }
 
     // ---------------------------------------- project CSV column mappings
 
     async getProjectColumnMappingsRaw(projectId: string): Promise<APIResponse> {
-        return this.request.get(`/xapi/structured-importer/projects/${encodeURIComponent(projectId)}/csv-column-mappings`);
+        return this.request.get(
+            `/xapi/structured-importer/projects/${encodeURIComponent(projectId)}/csv-column-mappings`,
+        );
     }
 
     async setProjectColumnMappingsRaw(projectId: string, mappings: ColumnMapping[]): Promise<APIResponse> {
-        return this.request.post(`/xapi/structured-importer/projects/${encodeURIComponent(projectId)}/csv-column-mappings`, {
-            headers: { ...this.headers(), 'Content-Type': 'application/json' },
-            data: { columnMappings: JSON.stringify(mappings) },
-        });
+        return this.request.post(
+            `/xapi/structured-importer/projects/${encodeURIComponent(projectId)}/csv-column-mappings`,
+            {
+                headers: { ...this.headers(), 'Content-Type': 'application/json' },
+                data: { columnMappings: JSON.stringify(mappings) },
+            },
+        );
     }
 
     async setProjectColumnMappings(projectId: string, mappings: ColumnMapping[]): Promise<void> {
         const res = await this.setProjectColumnMappingsRaw(projectId, mappings);
-        expect(res.ok(), `POST project column mappings failed: HTTP ${res.status()} ${await res.text()}`).toBeTruthy();
+        expect(
+            res.ok(),
+            `POST project column mappings failed: HTTP ${res.status()} ${await res.text()}`,
+        ).toBeTruthy();
     }
 
     async disableProjectColumnMappingsRaw(projectId: string): Promise<APIResponse> {
@@ -213,7 +228,10 @@ export class StructuredImporterApi {
         return res.json();
     }
 
-    async savePropertyDisplayMappingRaw(mapping: PropertyDisplayMapping, replaces?: string): Promise<APIResponse> {
+    async savePropertyDisplayMappingRaw(
+        mapping: PropertyDisplayMapping,
+        replaces?: string,
+    ): Promise<APIResponse> {
         return this.request.post('/xapi/structured-importer/property-display-mappings', {
             headers: { ...this.headers(), 'Content-Type': 'application/json' },
             params: replaces ? { replaces } : {},
@@ -231,7 +249,9 @@ export class StructuredImporterApi {
     // ------------------------------------------------------------ generic XNAT
 
     async getExperiment(experimentId: string): Promise<any> {
-        const res = await this.request.get(`/data/experiments/${encodeURIComponent(experimentId)}?format=json`);
+        const res = await this.request.get(
+            `/data/experiments/${encodeURIComponent(experimentId)}?format=json`,
+        );
         expect(res.ok(), `GET experiment ${experimentId} failed: HTTP ${res.status()}`).toBeTruthy();
         return (await res.json()).items[0];
     }
@@ -242,7 +262,9 @@ export class StructuredImporterApi {
     }
 
     async getScans(experimentId: string): Promise<any[]> {
-        const res = await this.request.get(`/data/experiments/${encodeURIComponent(experimentId)}/scans?format=json`);
+        const res = await this.request.get(
+            `/data/experiments/${encodeURIComponent(experimentId)}/scans?format=json`,
+        );
         expect(res.ok(), `GET scans for ${experimentId} failed: HTTP ${res.status()}`).toBeTruthy();
         return (await res.json()).ResultSet.Result;
     }
@@ -274,7 +296,9 @@ export class StructuredImporterApi {
 
     /** Sessions in a project, as {ID, label} rows. */
     async listExperiments(projectId: string): Promise<Array<{ ID: string; label: string }>> {
-        const res = await this.request.get(`/data/projects/${encodeURIComponent(projectId)}/experiments?format=json`);
+        const res = await this.request.get(
+            `/data/projects/${encodeURIComponent(projectId)}/experiments?format=json`,
+        );
         expect(res.ok(), `GET experiments for ${projectId} failed: HTTP ${res.status()}`).toBeTruthy();
         return (await res.json()).ResultSet.Result;
     }
@@ -288,13 +312,18 @@ export class StructuredImporterApi {
     }
 
     async ensureProject(projectId: string): Promise<void> {
-        const existing = await this.request.get(`/data/projects/${encodeURIComponent(projectId)}?format=json`);
+        const existing = await this.request.get(
+            `/data/projects/${encodeURIComponent(projectId)}?format=json`,
+        );
         if (existing.ok()) return;
         const res = await this.request.put(`/data/projects/${encodeURIComponent(projectId)}`, {
             headers: this.headers(),
             params: { event_action: 'Added Project' },
         });
-        expect(res.ok(), `Create project ${projectId} failed: HTTP ${res.status()} ${await res.text()}`).toBeTruthy();
+        expect(
+            res.ok(),
+            `Create project ${projectId} failed: HTTP ${res.status()} ${await res.text()}`,
+        ).toBeTruthy();
     }
 
     /**
@@ -351,7 +380,6 @@ export class StructuredImporterApi {
             console.warn(`[cleanup] error deleting experiment ${experimentId}: ${String(e)}`);
         }
     }
-
 }
 
 /**

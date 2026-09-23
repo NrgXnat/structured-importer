@@ -98,7 +98,12 @@ test.describe('scan-only modalities, used inside a session of another modality',
             // nothing else proves that in either direction.
             const archive = await buildDirectoryArchive(`matrix-scanonly-${mapping.modality}`, [
                 { scanId: '1', modality: 'MR', resourceName: 'DATA', files: { 'mr.dat': 'mr' } },
-                { scanId: '2', modality: mapping.modality, resourceName: 'DATA', files: { 'other.dat': 'other' } },
+                {
+                    scanId: '2',
+                    modality: mapping.modality,
+                    resourceName: 'DATA',
+                    files: { 'other.dat': 'other' },
+                },
             ]);
 
             const res = await api.importArchiveRaw(archive, {
@@ -121,7 +126,9 @@ test.describe('scan-only modalities, used inside a session of another modality',
             const scans = await api.getScans(id);
             expect(scans, 'both the MR scan and the scan-only-modality scan should exist').toHaveLength(2);
             const byId = new Map(scans.map(s => [s.ID, s.xsiType]));
-            expect(byId.get('2'), `scan 2 should take modality ${mapping.modality}'s scan type`).toBe(mapping.scan);
+            expect(byId.get('2'), `scan 2 should take modality ${mapping.modality}'s scan type`).toBe(
+                mapping.scan,
+            );
         });
     }
 });

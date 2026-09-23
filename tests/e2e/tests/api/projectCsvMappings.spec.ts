@@ -50,8 +50,10 @@ test('a project with no mappings of its own reports empty rather than echoing th
     expect(res.ok(), `GET project mappings failed: HTTP ${res.status()}`).toBeTruthy();
 
     const mappings = parseColumnMappings(await res.json().catch(() => null));
-    expect(mappings, 'an unconfigured project must be distinguishable from one configured identically to the site')
-        .toHaveLength(0);
+    expect(
+        mappings,
+        'an unconfigured project must be distinguishable from one configured identically to the site',
+    ).toHaveLength(0);
 });
 
 test('a project override is stored and read back independently of the site configuration', async () => {
@@ -61,8 +63,10 @@ test('a project override is stored and read back independently of the site confi
     expect(stored.map(m => m.column)).toContain('Project Only Column');
 
     const site = await api.getSiteColumnMappings();
-    expect(site.map(m => m.column), 'a project override must not leak into the site configuration')
-        .not.toContain('Project Only Column');
+    expect(
+        site.map(m => m.column),
+        'a project override must not leak into the site configuration',
+    ).not.toContain('Project Only Column');
     expect(site, 'the site configuration must be untouched by a project save').toEqual(siteMappings);
 });
 
@@ -85,7 +89,9 @@ test('deleting a project override removes it, where disabling did not', async ()
     const del = await api.deleteProjectColumnMappingsRaw(PROJECT);
     expect(del.ok(), `delete failed: HTTP ${del.status()}`).toBeTruthy();
 
-    const after = parseColumnMappings(await (await api.getProjectColumnMappingsRaw(PROJECT)).json().catch(() => null));
+    const after = parseColumnMappings(
+        await (await api.getProjectColumnMappingsRaw(PROJECT)).json().catch(() => null),
+    );
     expect(after, 'a deleted override must be gone, not merely inactive').toHaveLength(0);
 });
 

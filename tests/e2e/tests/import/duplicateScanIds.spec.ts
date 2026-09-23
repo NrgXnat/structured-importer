@@ -46,17 +46,25 @@ test('two rows naming the same scan with the same modality combine their resourc
     const archive = await buildManifestArchive('dupscan-agree', COLUMNS, [
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Axial T1',
-                'Session Label': session, 'Subject ID': subject,
-                'Resource Name': 'NIFTI', Path: 'nifti',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Axial T1',
+                'Session Label': session,
+                'Subject ID': subject,
+                'Resource Name': 'NIFTI',
+                Path: 'nifti',
             },
             files: { 'image.nii': 'nifti payload' },
         },
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Axial T1',
-                'Session Label': session, 'Subject ID': subject,
-                'Resource Name': 'BIDS', Path: 'bids',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Axial T1',
+                'Session Label': session,
+                'Subject ID': subject,
+                'Resource Name': 'BIDS',
+                Path: 'bids',
             },
             files: { 'sidecar.json': '{}' },
         },
@@ -70,17 +78,24 @@ test('two rows naming the same scan with the same modality combine their resourc
     created.push(experimentId);
 
     const scans = await api.getScans(experimentId);
-    expect(scans.map(s => s.ID), 'rows naming the same scan should produce one scan').toEqual(['1']);
+    expect(
+        scans.map(s => s.ID),
+        'rows naming the same scan should produce one scan',
+    ).toEqual(['1']);
     expect(scans[0].xsiType).toBe('xnat:mrScanData');
 
     const resources = await api.getScanResources(experimentId, '1');
-    expect(
-        resources.map(r => r.label).sort(),
-        'both rows contribute a resource to the same scan',
-    ).toEqual(['BIDS', 'NIFTI']);
+    expect(resources.map(r => r.label).sort(), 'both rows contribute a resource to the same scan').toEqual([
+        'BIDS',
+        'NIFTI',
+    ]);
 
-    expect((await api.getScanResourceFiles(experimentId, '1', 'NIFTI')).map(f => f.Name)).toEqual(['image.nii']);
-    expect((await api.getScanResourceFiles(experimentId, '1', 'BIDS')).map(f => f.Name)).toEqual(['sidecar.json']);
+    expect((await api.getScanResourceFiles(experimentId, '1', 'NIFTI')).map(f => f.Name)).toEqual([
+        'image.nii',
+    ]);
+    expect((await api.getScanResourceFiles(experimentId, '1', 'BIDS')).map(f => f.Name)).toEqual([
+        'sidecar.json',
+    ]);
 });
 
 test('two rows naming the same scan with different modalities are refused', async () => {
@@ -94,17 +109,25 @@ test('two rows naming the same scan with different modalities are refused', asyn
     const archive = await buildManifestArchive('dupscan-conflict', COLUMNS, [
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'First row, MR',
-                'Session Label': session, 'Subject ID': subject,
-                'Resource Name': 'NIFTI', Path: 'nifti',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'First row, MR',
+                'Session Label': session,
+                'Subject ID': subject,
+                'Resource Name': 'NIFTI',
+                Path: 'nifti',
             },
             files: { 'image.nii': 'nifti payload' },
         },
         {
             columns: {
-                'Scan ID': '1', Modality: 'CT', 'Series Description': 'Second row, CT',
-                'Session Label': session, 'Subject ID': subject,
-                'Resource Name': 'DICOM', Path: 'dicom',
+                'Scan ID': '1',
+                Modality: 'CT',
+                'Series Description': 'Second row, CT',
+                'Session Label': session,
+                'Subject ID': subject,
+                'Resource Name': 'DICOM',
+                Path: 'dicom',
             },
             files: { 'image.dcm': 'dicom payload' },
         },

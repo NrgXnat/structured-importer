@@ -78,21 +78,30 @@ test('a non-admin can read the property display mappings', async () => {
     // Authenticated on purpose so the editor drop-down renders for a project
     // owner, and a change that locked them down would break that silently.
     const res = await user.getPropertyDisplayMappingsRaw();
-    expect(res.ok(), `a non-admin should be able to read the drop-down contents: HTTP ${res.status()}`).toBeTruthy();
+    expect(
+        res.ok(),
+        `a non-admin should be able to read the drop-down contents: HTTP ${res.status()}`,
+    ).toBeTruthy();
 });
 
 test('a non-admin cannot delete a property display mapping', async () => {
     test.skip(!hasConfigApi(), `configuration API absent on ${pluginVersion()}`);
 
     const existing = await admin.getPropertyDisplayMappings();
-    test.skip(existing.length === 0, 'no property display mappings on this instance to attempt a delete against');
+    test.skip(
+        existing.length === 0,
+        'no property display mappings on this instance to attempt a delete against',
+    );
 
     const target = existing[0].display;
     const res = await user.deletePropertyDisplayMappingRaw(target);
     expect(res.status(), 'deleting is admin-only even though reading is not').toBeGreaterThanOrEqual(400);
 
     const after = await admin.getPropertyDisplayMappings();
-    expect(after.map(m => m.display), 'the mapping must still be there').toContain(target);
+    expect(
+        after.map(m => m.display),
+        'the mapping must still be there',
+    ).toContain(target);
 });
 
 test('a non-admin cannot import into a project they have no access to', async () => {
@@ -108,7 +117,10 @@ test('a non-admin cannot import into a project they have no access to', async ()
         resourceIdentifier: RESOURCE_IDENTIFIER.SIMPLE,
     });
 
-    expect(res.ok(), `${NON_ADMIN_USER} must not be able to import into a project they cannot edit`).toBeFalsy();
+    expect(
+        res.ok(),
+        `${NON_ADMIN_USER} must not be able to import into a project they cannot edit`,
+    ).toBeFalsy();
     expect(
         await admin.listExperiments(PRIVATE_PROJECT),
         'a refused import must leave the project empty',

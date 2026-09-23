@@ -26,18 +26,18 @@ test.beforeAll(async () => {
     await api.ensureProject(PROJECT);
 });
 
-test.afterAll(async () => {
-    for (const id of new Set(created)) await api.deleteExperimentQuietly(id);
-    if (OWNS_PROJECT) await api.deleteProjectQuietly(PROJECT);
-    cleanupArchives();
-    await api.dispose();
-});
-
 test.beforeEach(async ({ page }) => {
     await page.goto(`/app/template/CompressedUploaderPage.vm?project=${encodeURIComponent(PROJECT)}`);
     await page.waitForLoadState('load');
     await expect(page.locator('#uploadFORM')).toBeVisible();
     await selectStructuredHandler(page);
+});
+
+test.afterAll(async () => {
+    for (const id of new Set(created)) await api.deleteExperimentQuietly(id);
+    if (OWNS_PROJECT) await api.deleteProjectQuietly(PROJECT);
+    cleanupArchives();
+    await api.dispose();
 });
 
 /**
@@ -89,8 +89,9 @@ test('a directory archive uploaded through the form is archived correctly', asyn
 
     const files = await api.getScanResourceFiles(id as string, '1', 'NIFTI');
     expect(files.map(f => f.Name)).toEqual(['a.nii']);
-    expect(Number(files[0].Size), 'the bytes must survive the browser upload too')
-        .toBe('browser uploaded'.length);
+    expect(Number(files[0].Size), 'the bytes must survive the browser upload too').toBe(
+        'browser uploaded'.length,
+    );
 });
 
 test('a manifest archive uploaded through the form applies its metadata', async ({ page }) => {
@@ -100,8 +101,13 @@ test('a manifest archive uploaded through the form applies its metadata', async 
     const archive = await buildManifestArchive('uiup-csv', COLUMNS, [
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Uploaded through the browser',
-                'Session Label': session, 'Subject ID': subject, 'Resource Name': 'NIFTI', Path: 'd1',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Uploaded through the browser',
+                'Session Label': session,
+                'Subject ID': subject,
+                'Resource Name': 'NIFTI',
+                Path: 'd1',
             },
             files: { 'a.nii': 'csv via browser' },
         },
@@ -120,8 +126,9 @@ test('a manifest archive uploaded through the form applies its metadata', async 
     created.push(id as string);
 
     const scan = await api.getScan(id as string, '1');
-    expect(scan.series_description, 'the manifest metadata must survive the browser path')
-        .toBe('Uploaded through the browser');
+    expect(scan.series_description, 'the manifest metadata must survive the browser path').toBe(
+        'Uploaded through the browser',
+    );
 });
 
 test('every modality the drop-down offers can actually be submitted from the form', async ({ page }) => {
@@ -130,13 +137,15 @@ test('every modality the drop-down offers can actually be submitted from the for
     // nothing the API does not, which is the direction that would let a user
     // pick a modality the importer then rejects.
     const fromPage = (await page.locator('#primary-modality option').allTextContents())
-        .map(t => t.trim()).filter(Boolean);
+        .map(t => t.trim())
+        .filter(Boolean);
     const sessionCapable = (await api.getModalities()).filter(m => m.session).map(m => m.modality);
 
     expect(fromPage.length).toBeGreaterThan(0);
     for (const modality of fromPage) {
-        expect(sessionCapable, `the form offers "${modality}", which has no session data type`)
-            .toContain(modality);
+        expect(sessionCapable, `the form offers "${modality}", which has no session data type`).toContain(
+            modality,
+        );
     }
 });
 

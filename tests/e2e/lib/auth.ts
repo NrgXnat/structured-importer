@@ -24,7 +24,10 @@ export async function login(page: Page, username: string, password: string, csrf
     // never observe the transition and would time out.
     await Promise.all([
         page.waitForURL(url => !url.toString().includes('Login.vm'), { timeout: 30_000 }),
-        page.locator('#login_form').locator('button[type="submit"], input[type="submit"], #submit_login').click(),
+        page
+            .locator('#login_form')
+            .locator('button[type="submit"], input[type="submit"], #submit_login')
+            .click(),
     ]);
     await page.waitForLoadState('domcontentloaded');
 

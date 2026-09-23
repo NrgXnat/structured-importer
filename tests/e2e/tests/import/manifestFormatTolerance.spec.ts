@@ -53,9 +53,13 @@ test('a quoted cell containing a comma keeps the comma and does not shift the co
     const archive = await buildManifestArchive('tol-quoted', COLUMNS, [
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Axial, T1 weighted',
-                'Session Label': session, 'Subject ID': uniqueLabel('QuoteSubj'),
-                'Resource Name': 'NIFTI', Path: 'd1',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Axial, T1 weighted',
+                'Session Label': session,
+                'Subject ID': uniqueLabel('QuoteSubj'),
+                'Resource Name': 'NIFTI',
+                Path: 'd1',
             },
             files: { 'a.nii': 'quoted' },
         },
@@ -64,8 +68,9 @@ test('a quoted cell containing a comma keeps the comma and does not shift the co
     const id = await importManifest(archive);
 
     const scan = await api.getScan(id, '1');
-    expect(scan.series_description, 'the comma inside the quoted cell must survive')
-        .toBe('Axial, T1 weighted');
+    expect(scan.series_description, 'the comma inside the quoted cell must survive').toBe(
+        'Axial, T1 weighted',
+    );
     // If the quoting had been mishandled, the following columns would have
     // shifted by one and the modality would be wrong or absent.
     expect(scan.modality, 'a mis-parsed quote would shift every later column').toBe('MR');
@@ -86,8 +91,10 @@ test('a manifest with Windows line endings imports', async () => {
     // A stray carriage return would most likely end up on the end of the last
     // column's value, so the resource label is the one to check.
     const resources = await api.getScanResources(id, '1');
-    expect(resources.map(r => r.label), 'a trailing carriage return must not reach the stored value')
-        .toEqual(['NIFTI']);
+    expect(
+        resources.map(r => r.label),
+        'a trailing carriage return must not reach the stored value',
+    ).toEqual(['NIFTI']);
 });
 
 test('the manifest does not have to be called manifest.csv', async () => {
@@ -111,9 +118,13 @@ test('a scan identifier that is not a number is kept as written', async () => {
     const archive = await buildManifestArchive('tol-named-scan', COLUMNS, [
         {
             columns: {
-                'Scan ID': 'T1w', Modality: 'MR', 'Series Description': 'Named scan',
-                'Session Label': uniqueLabel('NamedSess'), 'Subject ID': uniqueLabel('NamedSubj'),
-                'Resource Name': 'NIFTI', Path: 'd1',
+                'Scan ID': 'T1w',
+                Modality: 'MR',
+                'Series Description': 'Named scan',
+                'Session Label': uniqueLabel('NamedSess'),
+                'Subject ID': uniqueLabel('NamedSubj'),
+                'Resource Name': 'NIFTI',
+                Path: 'd1',
             },
             files: { 'a.nii': 'named' },
         },
@@ -122,5 +133,8 @@ test('a scan identifier that is not a number is kept as written', async () => {
     const id = await importManifest(archive);
 
     const scans = await api.getScans(id);
-    expect(scans.map(s => s.ID), 'the scan ID must not be coerced to a number or renumbered').toEqual(['T1w']);
+    expect(
+        scans.map(s => s.ID),
+        'the scan ID must not be coerced to a number or renumbered',
+    ).toEqual(['T1w']);
 });

@@ -72,7 +72,12 @@ test('a validation pattern is stored with the column rather than discarded', asy
     const pattern = '^[A-Z]{3}-\\d{4}$';
     await api.setSiteColumnMappings([
         ...original,
-        { column: 'E2E Pattern Column', property: 'xnat:imageScanData/note', required: true, validation: pattern },
+        {
+            column: 'E2E Pattern Column',
+            property: 'xnat:imageScanData/note',
+            required: true,
+            validation: pattern,
+        },
     ]);
 
     const probe = (await api.getSiteColumnMappings()).find(m => m.column === 'E2E Pattern Column');

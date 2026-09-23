@@ -59,8 +59,13 @@ async function projectManifest(name: string, session: string, subject: string): 
     return buildManifestArchive(name, PROJECT_COLUMNS, [
         {
             columns: {
-                PROJ_Scan: '1', PROJ_Modality: 'MR', PROJ_Desc: 'Project mapped scan',
-                PROJ_Session: session, PROJ_Subject: subject, PROJ_Resource: 'NIFTI', Path: 'd1',
+                PROJ_Scan: '1',
+                PROJ_Modality: 'MR',
+                PROJ_Desc: 'Project mapped scan',
+                PROJ_Session: session,
+                PROJ_Subject: subject,
+                PROJ_Resource: 'NIFTI',
+                Path: 'd1',
             },
             files: { 'a.nii': 'project mapped payload' },
         },
@@ -72,8 +77,13 @@ async function siteManifest(name: string, session: string, subject: string): Pro
     return buildManifestArchive(name, COLUMNS, [
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Site mapped scan',
-                'Session Label': session, 'Subject ID': subject, 'Resource Name': 'NIFTI', Path: 'd1',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Site mapped scan',
+                'Session Label': session,
+                'Subject ID': subject,
+                'Resource Name': 'NIFTI',
+                Path: 'd1',
             },
             files: { 'a.nii': 'site mapped payload' },
         },
@@ -91,7 +101,9 @@ async function importManifest(archive: string) {
 test('a project mapping governs an import into that project', async () => {
     await api.setProjectColumnMappings(PROJECT, PROJECT_MAPPINGS);
 
-    const res = await importManifest(await projectManifest('prec-proj', uniqueLabel('PrecProj'), uniqueLabel('PrecSubj')));
+    const res = await importManifest(
+        await projectManifest('prec-proj', uniqueLabel('PrecProj'), uniqueLabel('PrecSubj')),
+    );
     const body = (await res.text()).trim();
     expect(res.ok(), `a manifest matching the PROJECT mapping should import: ${body}`).toBeTruthy();
 
@@ -107,13 +119,14 @@ test('the site mapping does NOT govern an import into a project that has its own
     // the importer merged both documents, or accepted any header.
     await api.setProjectColumnMappings(PROJECT, PROJECT_MAPPINGS);
 
-    const res = await importManifest(await siteManifest('prec-site-blocked', uniqueLabel('PrecSite'), uniqueLabel('PrecSubj')));
+    const res = await importManifest(
+        await siteManifest('prec-site-blocked', uniqueLabel('PrecSite'), uniqueLabel('PrecSubj')),
+    );
 
     expect(res.ok(), 'site-worded columns must not satisfy a project that overrides them').toBeFalsy();
-    expect(
-        await res.text(),
-        'the refusal should name the columns the PROJECT mapping requires',
-    ).toContain('PROJ_Scan');
+    expect(await res.text(), 'the refusal should name the columns the PROJECT mapping requires').toContain(
+        'PROJ_Scan',
+    );
 });
 
 test('disabling a project mapping falls back to the site mapping at import time', async () => {
@@ -121,9 +134,14 @@ test('disabling a project mapping falls back to the site mapping at import time'
     const disable = await api.disableProjectColumnMappingsRaw(PROJECT);
     expect(disable.ok(), `disable failed: HTTP ${disable.status()}`).toBeTruthy();
 
-    const res = await importManifest(await siteManifest('prec-disabled', uniqueLabel('PrecDisabled'), uniqueLabel('PrecSubj')));
+    const res = await importManifest(
+        await siteManifest('prec-disabled', uniqueLabel('PrecDisabled'), uniqueLabel('PrecSubj')),
+    );
     const body = (await res.text()).trim();
-    expect(res.ok(), `with the project mapping disabled, a site-worded manifest should import: ${body}`).toBeTruthy();
+    expect(
+        res.ok(),
+        `with the project mapping disabled, a site-worded manifest should import: ${body}`,
+    ).toBeTruthy();
 
     const id = body.split('/').filter(Boolean).pop() as string;
     created.push(id);
@@ -137,7 +155,9 @@ test('a disabled project mapping stops governing, rather than staying in force',
     await api.setProjectColumnMappings(PROJECT, PROJECT_MAPPINGS);
     await api.disableProjectColumnMappingsRaw(PROJECT);
 
-    const res = await importManifest(await projectManifest('prec-disabled-proj', uniqueLabel('PrecX'), uniqueLabel('PrecSubj')));
+    const res = await importManifest(
+        await projectManifest('prec-disabled-proj', uniqueLabel('PrecX'), uniqueLabel('PrecSubj')),
+    );
 
     expect(res.ok(), 'PROJ_ columns must stop working once the project mapping is disabled').toBeFalsy();
     expect(await res.text(), 'the refusal should now name the SITE columns').toContain('Scan ID');
@@ -148,15 +168,20 @@ test('a disabled project mapping reads back empty but is restored by saving it a
     await api.disableProjectColumnMappingsRaw(PROJECT);
 
     const whileDisabled = await (await api.getProjectColumnMappingsRaw(PROJECT)).json();
-    const parsed = typeof whileDisabled?.columnMappings === 'string'
-        ? JSON.parse(whileDisabled.columnMappings)
-        : whileDisabled?.columnMappings ?? [];
-    expect(parsed, 'a disabled configuration reads back as empty, not as its stored contents').toHaveLength(0);
+    const parsed =
+        typeof whileDisabled?.columnMappings === 'string'
+            ? JSON.parse(whileDisabled.columnMappings)
+            : (whileDisabled?.columnMappings ?? []);
+    expect(parsed, 'a disabled configuration reads back as empty, not as its stored contents').toHaveLength(
+        0,
+    );
 
     // Documented as retained and restorable. Proved by behavior, not by the
     // read endpoint: after re-saving, PROJ_ columns govern again.
     await api.setProjectColumnMappings(PROJECT, PROJECT_MAPPINGS);
-    const res = await importManifest(await projectManifest('prec-restored', uniqueLabel('PrecRestored'), uniqueLabel('PrecSubj')));
+    const res = await importManifest(
+        await projectManifest('prec-restored', uniqueLabel('PrecRestored'), uniqueLabel('PrecSubj')),
+    );
     const body = (await res.text()).trim();
     expect(res.ok(), `re-saving should restore the project mapping: ${body}`).toBeTruthy();
     created.push(body.split('/').filter(Boolean).pop() as string);
@@ -167,9 +192,14 @@ test('deleting a project mapping falls back to the site mapping at import time',
     const del = await api.deleteProjectColumnMappingsRaw(PROJECT);
     expect(del.ok(), `delete failed: HTTP ${del.status()}`).toBeTruthy();
 
-    const res = await importManifest(await siteManifest('prec-deleted', uniqueLabel('PrecDeleted'), uniqueLabel('PrecSubj')));
+    const res = await importManifest(
+        await siteManifest('prec-deleted', uniqueLabel('PrecDeleted'), uniqueLabel('PrecSubj')),
+    );
     const body = (await res.text()).trim();
-    expect(res.ok(), `after deleting the project mapping, the site mapping should apply: ${body}`).toBeTruthy();
+    expect(
+        res.ok(),
+        `after deleting the project mapping, the site mapping should apply: ${body}`,
+    ).toBeTruthy();
     created.push(body.split('/').filter(Boolean).pop() as string);
 });
 

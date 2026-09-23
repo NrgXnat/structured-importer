@@ -33,15 +33,15 @@ test.beforeAll(async () => {
     await api.ensureProject(PROJECT);
 });
 
-test.afterAll(async () => {
-    if (OWNS_PROJECT) await api.deleteProjectQuietly(PROJECT);
-    await api.dispose();
-});
-
 test.beforeEach(async ({ page }) => {
     await page.goto(`/app/template/CompressedUploaderPage.vm?project=${encodeURIComponent(PROJECT)}`);
     await page.waitForLoadState('load');
     await expect(page.locator('#uploadFORM')).toBeVisible();
+});
+
+test.afterAll(async () => {
+    if (OWNS_PROJECT) await api.deleteProjectQuietly(PROJECT);
+    await api.dispose();
 });
 
 test('the structured importer is offered as an import handler', async ({ page }) => {
@@ -67,11 +67,15 @@ test('the modality drop-down matches the modalities the API advertises', async (
 
     expect(fromPage.length, 'the modality drop-down must not be empty').toBeGreaterThan(0);
     for (const modality of fromPage) {
-        expect(fromApi, `the page offers "${modality}", which the API does not advertise`).toContain(modality);
+        expect(fromApi, `the page offers "${modality}", which the API does not advertise`).toContain(
+            modality,
+        );
     }
 });
 
-test('the custom labeling fields start hidden and disabled under Extract From Structure', async ({ page }) => {
+test('the custom labeling fields start hidden and disabled under Extract From Structure', async ({
+    page,
+}) => {
     await selectStructuredHandler(page);
 
     await expect(page.locator('input.toggleStructuredSessionLabeling[value="derived"]')).toBeChecked();
@@ -81,7 +85,9 @@ test('the custom labeling fields start hidden and disabled under Extract From St
     await expect(page.locator('#structured-session-labeling input[name="session"]')).toBeDisabled();
 });
 
-test('selecting Customize enables the custom fields, so their values are actually submitted', async ({ page }) => {
+test('selecting Customize enables the custom fields, so their values are actually submitted', async ({
+    page,
+}) => {
     await selectStructuredHandler(page);
 
     // Both inputs carry the `disabled` attribute in the template, and a
@@ -107,7 +113,9 @@ test('selecting Customize enables the custom fields, so their values are actuall
     await expect(sessionInput).toHaveValue('UiSession');
 });
 
-test('switching back to Extract From Structure hides and disables the custom fields again', async ({ page }) => {
+test('switching back to Extract From Structure hides and disables the custom fields again', async ({
+    page,
+}) => {
     await selectStructuredHandler(page);
 
     const subjectInput = page.locator('#structured-subject-labeling input[name="subject"]');
@@ -125,7 +133,9 @@ test('switching back to Extract From Structure hides and disables the custom fie
     await expect(subjectInput).toBeDisabled();
 });
 
-test('the structured labeling controls belong to the structured handler, not the DICOM one', async ({ page }) => {
+test('the structured labeling controls belong to the structured handler, not the DICOM one', async ({
+    page,
+}) => {
     await selectStructuredHandler(page);
 
     // Guards the duplicate-name trap described at the top of this file. The
@@ -159,7 +169,10 @@ test('selecting the structured handler persists without having to retry', async 
     await page.locator('#import-handler').selectOption('Structured-Zip');
 
     // Long enough to outlast the reset observed at ~150ms, short enough that a
-    // passing run stays quick once this is fixed.
+    // passing run stays quick once this is fixed. A fixed wait is correct
+    // here: the assertion is that nothing happens, and there is no event to
+    // wait for when the desired outcome is the absence of a change.
+    // eslint-disable-next-line playwright/no-wait-for-timeout
     await page.waitForTimeout(500);
 
     await expect(

@@ -50,10 +50,9 @@ test('a modality that is not in the configuration is refused', async () => {
     });
 
     expect(res.ok(), 'an unconfigured modality must not create a session').toBeFalsy();
-    expect(
-        await res.text(),
-        'the refusal must name the modality it did not recognize',
-    ).toContain('NOT_A_REAL_MODALITY');
+    expect(await res.text(), 'the refusal must name the modality it did not recognize').toContain(
+        'NOT_A_REAL_MODALITY',
+    );
 });
 
 test('the modality configuration is ordered by group and is free of duplicate modalities', async () => {
@@ -61,11 +60,12 @@ test('the modality configuration is ordered by group and is free of duplicate mo
     // straight from it. A duplicate modality would make the drop-down
     // ambiguous and the resolution order undefined.
     const groups = modalities.map(m => m.group);
-    expect(groups, 'modalities must arrive grouped, most common first')
-        .toEqual([...groups].sort((a, b) => a - b));
+    expect(groups, 'modalities must arrive grouped, most common first').toEqual(
+        [...groups].sort((a, b) => a - b),
+    );
 
     const codes = modalities.map(m => m.modality);
-    expect(codes.length, 'a modality must appear exactly once').toBe(new Set(codes).size);
+    expect(codes, 'a modality must appear exactly once').toHaveLength(new Set(codes).size);
 });
 
 test('every advertised mapping names at least one data type, and names it plausibly', async () => {

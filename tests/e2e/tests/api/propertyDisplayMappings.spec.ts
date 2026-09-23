@@ -79,11 +79,14 @@ test('each property backs exactly one display value in the shipped set', async (
     // shipped configuration already broke it, the drop-down would offer two
     // labels for the same property and the editor could not round-trip.
     const properties = original.map(m => m.property);
-    expect(properties.length, 'a property must appear exactly once').toBe(new Set(properties).size);
+    expect(properties, 'a property must appear exactly once').toHaveLength(new Set(properties).size);
 });
 
 test('an added mapping appears in the list', async () => {
-    const mapping: PropertyDisplayMapping = { display: 'E2E Added Property', property: freeProperty('added') };
+    const mapping: PropertyDisplayMapping = {
+        display: 'E2E Added Property',
+        property: freeProperty('added'),
+    };
 
     const res = await api.savePropertyDisplayMappingRaw(mapping);
     expect(res.ok(), `save failed: HTTP ${res.status()} ${await res.text()}`).toBeTruthy();
@@ -102,7 +105,9 @@ test('a second display value onto an already-mapped property is refused', async 
     expect(second.ok(), 'two display values for one property would make the drop-down ambiguous').toBeFalsy();
 
     const displays = (await api.getPropertyDisplayMappings()).map(m => m.display);
-    expect(displays, 'the refused mapping must not have been stored anyway').not.toContain('E2E Duplicate Property');
+    expect(displays, 'the refused mapping must not have been stored anyway').not.toContain(
+        'E2E Duplicate Property',
+    );
 });
 
 test('the replaces parameter renames a mapping in place instead of adding a second one', async () => {
@@ -119,9 +124,12 @@ test('the replaces parameter renames a mapping in place instead of adding a seco
     expect(res.ok(), `rename failed: HTTP ${res.status()} ${await res.text()}`).toBeTruthy();
 
     const after = await api.getPropertyDisplayMappings();
-    expect(after.map(m => m.display), 'the old display value must be gone').not.toContain('E2E Rename Before');
+    expect(
+        after.map(m => m.display),
+        'the old display value must be gone',
+    ).not.toContain('E2E Rename Before');
     expect(after.map(m => m.display)).toContain('E2E Rename After');
-    expect(after.length, 'an edit must not leave the original behind as a duplicate').toBe(countBefore);
+    expect(after, 'an edit must not leave the original behind as a duplicate').toHaveLength(countBefore);
 });
 
 test('a deleted mapping is gone from the list', async () => {

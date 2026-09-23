@@ -17,6 +17,9 @@ import { XNAT_URL, projectNameFor, uniqueLabel, OWNS_PROJECT } from '../../lib/e
 
 const PROJECT = projectNameFor('mfmt');
 
+/** Byte order mark, written as an escape so it is visible in the source. */
+const BOM = '\uFEFF';
+
 let api: StructuredImporterApi;
 const created: string[] = [];
 
@@ -50,7 +53,7 @@ test('a manifest saved with a byte order mark is read correctly', async () => {
     // import fails with `missing required column(s): [Scan ID]`.
     const session = uniqueLabel('BomSess');
     const withBom = await buildRawArchive('mfmt-bom', {
-        'manifest.csv': `﻿${HEADER}\n1,MR,BOM scan,${session},${uniqueLabel('BomSubj')},NIFTI,d1\n`,
+        'manifest.csv': `${BOM}${HEADER}\n1,MR,BOM scan,${session},${uniqueLabel('BomSubj')},NIFTI,d1\n`,
         'd1/a.nii': 'bom payload',
     });
 
@@ -105,18 +108,16 @@ test('a row whose Path does not exist in the archive is refused, and the message
     // every row's Path value, which would make the path exist and the test
     // meaningless.
     const badPath = await buildRawArchive('mfmt-bad-path', {
-        'manifest.csv':
-            `${HEADER}\n1,MR,Missing path,${uniqueLabel('MissSess')},${uniqueLabel('MissSubj')},NIFTI,nope/nothing\n`,
+        'manifest.csv': `${HEADER}\n1,MR,Missing path,${uniqueLabel('MissSess')},${uniqueLabel('MissSubj')},NIFTI,nope/nothing\n`,
         'elsewhere/a.nii': 'this file is not where the manifest says',
     });
 
     const res = await importRaw(badPath);
 
     expect(res.ok(), 'a path that is not in the archive must not import as an empty resource').toBeFalsy();
-    expect(
-        await res.text(),
-        'the refusal should name the path so the user can find the typo',
-    ).toContain('nope/nothing');
+    expect(await res.text(), 'the refusal should name the path so the user can find the typo').toContain(
+        'nope/nothing',
+    );
 });
 
 test('a subject label XNAT will not accept is refused with a message that names it', async () => {
@@ -132,16 +133,23 @@ test('a subject label XNAT will not accept is refused with a message that names 
         const archive = await buildManifestArchive(`mfmt-label-${encodeURIComponent(subject)}`, COLUMNS, [
             {
                 columns: {
-                    'Scan ID': '1', Modality: 'MR', 'Series Description': 'Label check',
-                    'Session Label': uniqueLabel('LabelSess'), 'Subject ID': subject,
-                    'Resource Name': 'NIFTI', Path: 'd1',
+                    'Scan ID': '1',
+                    Modality: 'MR',
+                    'Series Description': 'Label check',
+                    'Session Label': uniqueLabel('LabelSess'),
+                    'Subject ID': subject,
+                    'Resource Name': 'NIFTI',
+                    Path: 'd1',
                 },
                 files: { 'a.nii': 'x' },
             },
         ]);
 
         const res = await importRaw(archive);
-        const body = (await res.text()).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        const body = (await res.text())
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
 
         expect(res.ok(), `subject "${subject}" was accepted; XNAT rejects these labels`).toBeFalsy();
         expect(
@@ -159,9 +167,13 @@ test('a subject label with a trailing space is accepted, where one with an inner
     const trailing = await buildManifestArchive('mfmt-trailing-space', COLUMNS, [
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Trailing space',
-                'Session Label': uniqueLabel('TrailSess'), 'Subject ID': `${uniqueLabel('TrailSubj')} `,
-                'Resource Name': 'NIFTI', Path: 'd1',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Trailing space',
+                'Session Label': uniqueLabel('TrailSess'),
+                'Subject ID': `${uniqueLabel('TrailSubj')} `,
+                'Resource Name': 'NIFTI',
+                Path: 'd1',
             },
             files: { 'a.nii': 'x' },
         },

@@ -53,24 +53,34 @@ test('a directory archive becomes a session whose scans, resources and files all
     created.push(experimentId);
 
     const experiment = await api.getExperiment(experimentId);
-    expect(experiment.meta['xsi:type'], 'primary-modality MR must produce an MR session').toBe('xnat:mrSessionData');
+    expect(experiment.meta['xsi:type'], 'primary-modality MR must produce an MR session').toBe(
+        'xnat:mrSessionData',
+    );
     expect(experiment.data_fields.label).toBe(session);
     expect(experiment.data_fields.project).toBe(PROJECT);
 
     const scans = await api.getScans(experimentId);
-    expect(scans.map(s => s.ID).sort(), 'scan IDs come from the top-level directory names').toEqual(['1', '2']);
+    expect(scans.map(s => s.ID).sort(), 'scan IDs come from the top-level directory names').toEqual([
+        '1',
+        '2',
+    ]);
     for (const scan of scans) {
         expect(scan.xsiType, 'an MR scan directory must produce an MR scan').toBe('xnat:mrScanData');
     }
 
     const resources = await api.getScanResources(experimentId, '1');
-    expect(resources.map(r => r.label), 'the resource label comes from the third directory level').toEqual(['NIFTI']);
+    expect(
+        resources.map(r => r.label),
+        'the resource label comes from the third directory level',
+    ).toEqual(['NIFTI']);
 
     // The check that distinguishes a real import from a convincing empty one.
     const files = await api.getScanResourceFiles(experimentId, '1', 'NIFTI');
     expect(files.map(f => f.Name)).toEqual(['scan1.nii']);
-    expect(Number(files[0].Size), 'an imported file with zero bytes is a failed import that reported success')
-        .toBe('scan one payload'.length);
+    expect(
+        Number(files[0].Size),
+        'an imported file with zero bytes is a failed import that reported success',
+    ).toBe('scan one payload'.length);
 });
 
 test('the subject named in the upload parameters is created and owns the session', async () => {
@@ -131,8 +141,12 @@ test('two scans each keep their own files rather than sharing one resource', asy
     });
     created.push(experimentId);
 
-    expect((await api.getScanResourceFiles(experimentId, '1', 'NIFTI')).map(f => f.Name)).toEqual(['one.nii']);
-    expect((await api.getScanResourceFiles(experimentId, '2', 'NIFTI')).map(f => f.Name)).toEqual(['two.nii']);
+    expect((await api.getScanResourceFiles(experimentId, '1', 'NIFTI')).map(f => f.Name)).toEqual([
+        'one.nii',
+    ]);
+    expect((await api.getScanResourceFiles(experimentId, '2', 'NIFTI')).map(f => f.Name)).toEqual([
+        'two.nii',
+    ]);
 });
 
 test('directories nested inside a resource are preserved rather than flattened', async () => {
@@ -156,8 +170,10 @@ test('directories nested inside a resource are preserved rather than flattened',
 
     const files = await api.getScanResourceFiles(experimentId, '1', 'NIFTI');
     const paths = files.map(f => f.URI.split('/files/').pop());
-    expect(paths.sort(), 'the nested path must be preserved inside the resource')
-        .toEqual(['sub/deeper/deep.nii', 'top.nii']);
+    expect(paths.sort(), 'the nested path must be preserved inside the resource').toEqual([
+        'sub/deeper/deep.nii',
+        'top.nii',
+    ]);
 });
 
 test('a file sitting at the archive root does not prevent the scan directories importing', async () => {
@@ -179,7 +195,10 @@ test('a file sitting at the archive root does not prevent the scan directories i
     created.push(experimentId);
 
     const scans = await api.getScans(experimentId);
-    expect(scans.map(s => s.ID), 'the stray root file must not become a scan').toEqual(['1']);
+    expect(
+        scans.map(s => s.ID),
+        'the stray root file must not become a scan',
+    ).toEqual(['1']);
 });
 
 test('an archive with twenty scans imports all of them', async () => {

@@ -34,6 +34,9 @@ export async function chooseModality(page: Page, modality: string): Promise<void
     const chosen = page.locator('#primary-modality + .chosen-container');
     await expect(chosen).toBeVisible();
     await chosen.click();
-    await chosen.locator('.chosen-results li', { hasText: new RegExp(`^${modality}$`) }).first().click();
+    await chosen
+        .locator('.chosen-results li', { hasText: new RegExp(`^${modality}$`) })
+        .first()
+        .click();
     await expect(chosen.locator('.chosen-single span')).toHaveText(modality);
 }

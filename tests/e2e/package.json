@@ -1,22 +1,32 @@
 {
-  "name": "structured-importer-e2e",
-  "private": true,
-  "scripts": {
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "test:ui": "playwright test --ui",
-    "test:api": "playwright test --project api",
-    "test:import": "playwright test --project import",
-    "test:validation": "playwright test --project validation",
-    "test:permissions": "playwright test --project permissions",
-    "test:browser": "playwright test --project browser"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.49.0",
-    "@types/archiver": "^6.0.3",
-    "@types/node": "^22.10.0",
-    "archiver": "^7.0.1",
-    "dotenv": "^17.3.1",
-    "typescript": "^5.9.3"
-  }
+    "name": "structured-importer-e2e",
+    "private": true,
+    "scripts": {
+        "test": "playwright test",
+        "test:headed": "playwright test --headed",
+        "test:ui": "playwright test --ui",
+        "test:api": "playwright test --project api",
+        "test:import": "playwright test --project import",
+        "test:validation": "playwright test --project validation",
+        "test:permissions": "playwright test --project permissions",
+        "test:browser": "playwright test --project browser",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.39.5",
+        "@playwright/test": "^1.49.0",
+        "@types/archiver": "^6.0.3",
+        "@types/node": "^22.10.0",
+        "archiver": "^7.0.1",
+        "dotenv": "^17.3.1",
+        "eslint": "^9.39.5",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-playwright": "^2.12.0",
+        "prettier": "^3.9.9",
+        "typescript": "^5.9.3",
+        "typescript-eslint": "^8.70.1"
+    }
 }

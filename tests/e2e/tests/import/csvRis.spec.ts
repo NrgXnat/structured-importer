@@ -88,8 +88,9 @@ test('every mapped manifest column reaches the XNAT property it is mapped to', a
     expect(experiment.data_fields.label, 'Session Label column must set the session label').toBe(session);
 
     const subjectRecord = await api.getSubject(PROJECT, subject);
-    expect(experiment.data_fields.subject_ID, 'Subject ID column must set the session owner')
-        .toBe(subjectRecord.data_fields.ID);
+    expect(experiment.data_fields.subject_ID, 'Subject ID column must set the session owner').toBe(
+        subjectRecord.data_fields.ID,
+    );
 
     const scans = await api.getScans(experimentId);
     expect(scans.map(s => s.ID).sort()).toEqual(['1', '2']);
@@ -102,8 +103,8 @@ test('every mapped manifest column reaches the XNAT property it is mapped to', a
     expect(scanOne.start_date, 'Start Date column, reformatted to ISO on storage').toBe('2020-11-02');
     expect(scanOne.startTime, 'Start Time column').toBe('10:30:00');
 
-    const demographics = subjectRecord.children
-        ?.find((c: any) => c.field === 'demographics')?.items?.[0]?.data_fields;
+    const demographics = subjectRecord.children?.find((c: any) => c.field === 'demographics')?.items?.[0]
+        ?.data_fields;
     expect(demographics?.weight, 'Subject Weight (g) column must reach subject demographics').toBe(70000);
 });
 
@@ -114,9 +115,13 @@ test('the Resource Name column names the resource, and the Path column selects i
     const archive = await buildManifestArchive('csv-resource', ALL_COLUMNS, [
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'With resource name',
-                'Session Label': session, 'Subject ID': subject,
-                'Resource Name': 'DERIVED', Path: 'files/one',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'With resource name',
+                'Session Label': session,
+                'Subject ID': subject,
+                'Resource Name': 'DERIVED',
+                Path: 'files/one',
             },
             files: { 'only.nii': 'the only file' },
         },
@@ -145,17 +150,25 @@ test('one manifest describing two sessions creates both, not just the first row'
     const archive = await buildManifestArchive('csv-two-sessions', ALL_COLUMNS, [
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Session A scan',
-                'Session Label': sessionA, 'Subject ID': subject,
-                'Resource Name': 'NIFTI', Path: 'a/scan1',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Session A scan',
+                'Session Label': sessionA,
+                'Subject ID': subject,
+                'Resource Name': 'NIFTI',
+                Path: 'a/scan1',
             },
             files: { 'a.nii': 'a' },
         },
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Session B scan',
-                'Session Label': sessionB, 'Subject ID': subject,
-                'Resource Name': 'NIFTI', Path: 'b/scan1',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Session B scan',
+                'Session Label': sessionB,
+                'Subject ID': subject,
+                'Resource Name': 'NIFTI',
+                Path: 'b/scan1',
             },
             files: { 'b.nii': 'b' },
         },
@@ -175,8 +188,9 @@ test('one manifest describing two sessions creates both, not just the first row'
     // that silently discarded the second session would otherwise pass.
     const experiments = await api.listExperiments(PROJECT);
     const labels = experiments.map(e => e.label);
-    expect(labels, 'both sessions named in the manifest must exist')
-        .toEqual(expect.arrayContaining([sessionA, sessionB]));
+    expect(labels, 'both sessions named in the manifest must exist').toEqual(
+        expect.arrayContaining([sessionA, sessionB]),
+    );
 
     for (const label of [sessionA, sessionB]) {
         const match = experiments.find(e => e.label === label);

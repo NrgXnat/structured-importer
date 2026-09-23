@@ -59,9 +59,12 @@ test('a manifest missing a required column is refused', async () => {
         [
             {
                 columns: {
-                    'Scan ID': '1', 'Series Description': 'No modality column',
-                    'Session Label': uniqueLabel('ManSess'), 'Subject ID': uniqueLabel('ManSubj'),
-                    'Resource Name': 'NIFTI', Path: 'data/scan1',
+                    'Scan ID': '1',
+                    'Series Description': 'No modality column',
+                    'Session Label': uniqueLabel('ManSess'),
+                    'Subject ID': uniqueLabel('ManSubj'),
+                    'Resource Name': 'NIFTI',
+                    Path: 'data/scan1',
                 },
                 files: { 'a.nii': 'a' },
             },
@@ -87,9 +90,13 @@ test('a manifest cell failing its configured validation pattern is refused', asy
         [
             {
                 columns: {
-                    'Scan ID': '1', Modality: 'MR', 'Series Description': 'Bad date',
-                    'Session Label': uniqueLabel('ManSess'), 'Subject ID': uniqueLabel('ManSubj'),
-                    'Resource Name': 'NIFTI', Path: 'data/scan1',
+                    'Scan ID': '1',
+                    Modality: 'MR',
+                    'Series Description': 'Bad date',
+                    'Session Label': uniqueLabel('ManSess'),
+                    'Subject ID': uniqueLabel('ManSubj'),
+                    'Resource Name': 'NIFTI',
+                    Path: 'data/scan1',
                     'Start Date': '2020-11-02',
                 },
                 files: { 'a.nii': 'a' },
@@ -110,17 +117,25 @@ test('a manifest naming two subjects is refused when a custom subject label is a
     const archive = await buildManifestArchive('man-two-subjects', COLUMNS, [
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Subject one',
-                'Session Label': 'SessOne', 'Subject ID': 'SubjectOne',
-                'Resource Name': 'NIFTI', Path: 'one/scan1',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Subject one',
+                'Session Label': 'SessOne',
+                'Subject ID': 'SubjectOne',
+                'Resource Name': 'NIFTI',
+                Path: 'one/scan1',
             },
             files: { 'a.nii': 'a' },
         },
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Subject two',
-                'Session Label': 'SessTwo', 'Subject ID': 'SubjectTwo',
-                'Resource Name': 'NIFTI', Path: 'two/scan1',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Subject two',
+                'Session Label': 'SessTwo',
+                'Subject ID': 'SubjectTwo',
+                'Resource Name': 'NIFTI',
+                Path: 'two/scan1',
             },
             files: { 'b.nii': 'b' },
         },
@@ -147,17 +162,25 @@ test('the same multi-subject manifest imports fine with no custom label supplied
     const archive = await buildManifestArchive('man-two-subjects-ok', COLUMNS, [
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Subject one',
-                'Session Label': uniqueLabel('OkSessOne'), 'Subject ID': uniqueLabel('OkSubjOne'),
-                'Resource Name': 'NIFTI', Path: 'one/scan1',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Subject one',
+                'Session Label': uniqueLabel('OkSessOne'),
+                'Subject ID': uniqueLabel('OkSubjOne'),
+                'Resource Name': 'NIFTI',
+                Path: 'one/scan1',
             },
             files: { 'a.nii': 'a' },
         },
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Subject two',
-                'Session Label': uniqueLabel('OkSessTwo'), 'Subject ID': uniqueLabel('OkSubjTwo'),
-                'Resource Name': 'NIFTI', Path: 'two/scan1',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Subject two',
+                'Session Label': uniqueLabel('OkSessTwo'),
+                'Subject ID': uniqueLabel('OkSubjTwo'),
+                'Resource Name': 'NIFTI',
+                Path: 'two/scan1',
             },
             files: { 'b.nii': 'b' },
         },
@@ -169,7 +192,10 @@ test('the same multi-subject manifest imports fine with no custom label supplied
         resourceIdentifier: RESOURCE_IDENTIFIER.CSV,
     });
 
-    expect(res.ok(), `a multi-subject manifest with no custom label should import: ${await res.text()}`).toBeTruthy();
+    expect(
+        res.ok(),
+        `a multi-subject manifest with no custom label should import: ${await res.text()}`,
+    ).toBeTruthy();
 
     for (const e of await api.listExperiments(PROJECT)) {
         if (e.label.startsWith('OkSess')) created.push(e.ID);
@@ -183,9 +209,13 @@ test('the upload parameter wins over the manifest when both name a session', asy
     const archive = await buildManifestArchive('man-precedence', COLUMNS, [
         {
             columns: {
-                'Scan ID': '1', Modality: 'MR', 'Series Description': 'Precedence check',
-                'Session Label': manifestSession, 'Subject ID': uniqueLabel('PrecSubj'),
-                'Resource Name': 'NIFTI', Path: 'data/scan1',
+                'Scan ID': '1',
+                Modality: 'MR',
+                'Series Description': 'Precedence check',
+                'Session Label': manifestSession,
+                'Subject ID': uniqueLabel('PrecSubj'),
+                'Resource Name': 'NIFTI',
+                Path: 'data/scan1',
             },
             files: { 'a.nii': 'a' },
         },
@@ -200,10 +230,12 @@ test('the upload parameter wins over the manifest when both name a session', asy
     created.push(experimentId);
 
     const experiment = await api.getExperiment(experimentId);
-    expect(experiment.data_fields.label, 'the upload parameter takes precedence over the manifest')
-        .toBe(parameterSession);
+    expect(experiment.data_fields.label, 'the upload parameter takes precedence over the manifest').toBe(
+        parameterSession,
+    );
 
     const labels = (await api.listExperiments(PROJECT)).map(e => e.label);
-    expect(labels, 'the manifest label must not also appear as a second session')
-        .not.toContain(manifestSession);
+    expect(labels, 'the manifest label must not also appear as a second session').not.toContain(
+        manifestSession,
+    );
 });

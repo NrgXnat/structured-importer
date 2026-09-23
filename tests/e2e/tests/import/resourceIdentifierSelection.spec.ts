@@ -53,7 +53,10 @@ test('with no resourceIdentifier and no toggle, a directory archive is refused b
         'primary-modality': 'MR',
     });
 
-    expect(res.ok(), 'the default path selects the CSV service, which has no manifest to read here').toBeFalsy();
+    expect(
+        res.ok(),
+        'the default path selects the CSV service, which has no manifest to read here',
+    ).toBeFalsy();
     expect(await res.text()).toContain('No CSV manifest');
 });
 
@@ -91,7 +94,10 @@ test('a non-derived toggle selects the manifest-aware service, which walks direc
     created.push(experimentId);
 
     const scans = await api.getScans(experimentId);
-    expect(scans.map(s => s.ID), 'a directory-derived scan ID proves the directory walker ran').toEqual(['7']);
+    expect(
+        scans.map(s => s.ID),
+        'a directory-derived scan ID proves the directory walker ran',
+    ).toEqual(['7']);
 });
 
 test('the manifest-aware service prefers the manifest when the archive has one', async () => {
@@ -104,9 +110,13 @@ test('the manifest-aware service prefers the manifest when the archive has one',
     const archive = await buildManifestArchive('sel-manifest-wins', COLUMNS, [
         {
             columns: {
-                'Scan ID': '42', Modality: 'MR', 'Series Description': 'Manifest driven',
-                'Session Label': session, 'Subject ID': subject,
-                'Resource Name': 'NIFTI', Path: 'data/scan42',
+                'Scan ID': '42',
+                Modality: 'MR',
+                'Series Description': 'Manifest driven',
+                'Session Label': session,
+                'Subject ID': subject,
+                'Resource Name': 'NIFTI',
+                Path: 'data/scan42',
             },
             files: { 'x.nii': 'x' },
         },
@@ -120,7 +130,10 @@ test('the manifest-aware service prefers the manifest when the archive has one',
     created.push(experimentId);
 
     const scans = await api.getScans(experimentId);
-    expect(scans.map(s => s.ID), 'the manifest Scan ID must win over the directory name').toEqual(['42']);
+    expect(
+        scans.map(s => s.ID),
+        'the manifest Scan ID must win over the directory name',
+    ).toEqual(['42']);
 
     const experiment = await api.getExperiment(experimentId);
     expect(experiment.data_fields.label).toBe(session);

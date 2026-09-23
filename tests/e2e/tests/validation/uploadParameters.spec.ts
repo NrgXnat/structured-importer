@@ -12,7 +12,12 @@
  */
 import { test, expect } from '../../lib/fixtures';
 import { StructuredImporterApi, RESOURCE_IDENTIFIER } from '../../lib/api';
-import { buildDirectoryArchive, buildNonArchiveFile, buildRawArchive, cleanupArchives } from '../../lib/archive';
+import {
+    buildDirectoryArchive,
+    buildNonArchiveFile,
+    buildRawArchive,
+    cleanupArchives,
+} from '../../lib/archive';
 import { XNAT_URL, projectNameFor, uniqueLabel, OWNS_PROJECT } from '../../lib/env';
 
 const PROJECT = projectNameFor('val');
@@ -46,8 +51,7 @@ test('an upload with no project is refused and creates nothing', async () => {
 
     expect(res.ok()).toBeFalsy();
     expect(await res.text(), 'the refusal must name the missing parameter').toContain('project');
-    expect(await api.listExperiments(PROJECT), 'a refused upload must create nothing')
-        .toHaveLength(before);
+    expect(await api.listExperiments(PROJECT), 'a refused upload must create nothing').toHaveLength(before);
 });
 
 test('an upload with no primary-modality is refused', async () => {
@@ -74,8 +78,7 @@ test('an upload naming a project that does not exist is refused', async () => {
     });
 
     expect(res.ok()).toBeFalsy();
-    expect(await res.text(), 'the refusal must name the project it could not find')
-        .toContain(missingProject);
+    expect(await res.text(), 'the refusal must name the project it could not find').toContain(missingProject);
 });
 
 test('a directory archive with no subject or session parameter is refused, because nothing supplies the labels', async () => {
