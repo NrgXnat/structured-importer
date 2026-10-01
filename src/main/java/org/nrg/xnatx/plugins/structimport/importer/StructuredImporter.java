@@ -33,6 +33,7 @@ import org.nrg.xnatx.plugins.structimport.models.PropertyTargets;
 import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService.ScanResource;
+import org.restlet.data.Status;
 
 import java.io.File;
 import java.io.IOException;
@@ -58,6 +59,7 @@ import static org.nrg.xft.event.XftItemEventI.CREATE;
 public class StructuredImporter extends ImporterHandlerA {
     public static final String IMPORTER_HANDLER          = "Structured-Zip";
     public static final String PARAM_RESOURCE_IDENTIFIER = ResourceIdentifierSelector.PARAM_RESOURCE_IDENTIFIER;
+    public static final String NO_FILES_IMPORTED_PREFIX  = "NoFilesImported:";
 
     private static final String EXTRACTED_FOLDER       = "extracted";
     private static final String PARAM_PROJECT          = "project";
@@ -133,19 +135,32 @@ public class StructuredImporter extends ImporterHandlerA {
                 uris.add(createSession(entry.getKey(), entry.getValue()));
             }
             if (uris.isEmpty()) {
-                log.warn("Tried to import sessions from {} but didn't find anything actionable", getFilename());
-                failed("Tried to import sessions from " + getFilename() + " but didn't find anything actionable", true);
-            } else {
-                if (uris.size() == 1) {
-                    log.info("Completed import of session {}", uris.get(0));
-                } else {
-                    log.info("Completed import of {} sessions:\n * {}", uris.size(), String.join("\n * ", uris));
-                }
-                completed("Archive:" + String.join(";", uris), true);
+                // The upload itself succeeded, so report that rather than a failure: the activity tab gets a
+                // terminal non-failure message (rendered by importActivity.js) and a synchronous request
+                // gets 204 No Content, which the core Importer resource sets from the exception's status.
+                final String message = "The archive " + getFilename() + " was uploaded successfully, but no files were imported because no scan resources were found in it.";
+                log.warn("No scan resources found in {}, nothing imported", getFilename());
+                completed(NO_FILES_IMPORTED_PREFIX + message, true);
+                throw new ClientException(Status.SUCCESS_NO_CONTENT, message);
             }
+            if (uris.size() == 1) {
+                log.info("Completed import of session {}", uris.get(0));
+            } else {
+                log.info("Completed import of {} sessions:\n * {}", uris.size(), String.join("\n * ", uris));
+            }
+            completed("Archive:" + String.join(";", uris), true);
             return uris;
+        } catch (ClientException e) {
+            throw reportFailure(e);
+        } catch (ServerException e) {
+            throw reportFailure(e);
         } catch (IOException e) {
-            throw new ClientException("Unable to read data from file " + getFilename(), e);
+            throw reportFailure(new ClientException("Unable to read data from file " + getFilename() + ": " + e.getMessage(), e));
+        } catch (IllegalStateException e) {
+            // Resource identifier services report manifest and configuration problems this way
+            throw reportFailure(new ClientException("An error was found in the file " + getFilename() + ": " + e.getMessage(), e));
+        } catch (RuntimeException e) {
+            throw reportFailure(new ServerException("An unexpected error occurred importing the file " + getFilename() + ": " + e.getMessage(), e));
         } finally {
             final File workingDir = getWorkingDirectory().toFile();
             if (workingDir.exists()) {
@@ -157,6 +172,20 @@ public class StructuredImporter extends ImporterHandlerA {
                 }
             }
         }
+    }
+
+    /**
+     * Publishes a terminal failure status for the exception before it's rethrown. When the import runs
+     * asynchronously (the compressed uploader), the executor discards the exception, so without this the
+     * activity tab never learns the import ended. The 204 "no files imported" exception already published
+     * its own terminal status, so it's passed through untouched.
+     */
+    private <E extends Exception> E reportFailure(final E exception) {
+        if (!(exception instanceof ClientException && Status.SUCCESS_NO_CONTENT.equals(((ClientException) exception).getStatus()))) {
+            log.error("Import of {} failed", getFilename(), exception);
+            failed(StringUtils.defaultIfBlank(exception.getMessage(), exception.getClass().getSimpleName()), true);
+        }
+        return exception;
     }
 
     private Map<SessionContext, Map<ScanResource, List<Path>>> groupBySession(final Map<ScanResource, List<Path>> resources) throws ClientException {

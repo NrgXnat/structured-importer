@@ -60,6 +60,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the manifest also carries labels, the upload values now **override** the manifest values.
   Previously this was rejected as a conflict (HTTP 400). Imports whose manifest contains multiple
   distinct subjects or sessions are rejected when custom labels are supplied.
+- **Behavior change:** an upload that contains no scan resources now returns **HTTP 204 No
+  Content** from a synchronous `POST /data/services/import` call. Previously it returned HTTP 200
+  with an empty body, which was indistinguishable from success. No subject or session is created.
+  When the upload comes through the compressed uploader, the activity tab now reports that the
+  archive was uploaded successfully but no files were imported. Previously it reported a failed
+  extraction/review and pointed to the prearchive. The activity-tab callback ships as
+  `scripts/xnat/plugin/structured-importer/importActivity.js` and is loaded on every page through
+  the `screens/header` extension point.
+
+### Fixed
+
+- Any import failure now publishes a terminal failure status, so the activity tab stops polling and
+  shows the error. This includes errors raised by the CSV manifest service, such as an archive with
+  no CSV manifest. Previously the asynchronous executor discarded the exception and the activity
+  tab polled indefinitely.
 
 ## [1.0.0] - 2026-07-31
 
