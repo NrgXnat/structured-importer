@@ -1,8 +1,8 @@
 /**
  * Refusal paths for the upload parameters.
  *
- * Every test here asserts that the importer REFUSED an upload. Each one also
- * asserts that nothing was created, because "returned an error" and "did not
+ * Every test here asserts that the importer REFUSED an upload, or reported
+ * that nothing was imported. Each one also asserts that nothing was created, because "returned an error" and "did not
  * create half a session" are different claims, and only the second is what an
  * administrator cares about after a failed import.
  *
@@ -109,11 +109,12 @@ test('a file that is not an archive is refused as an unsupported format', async 
     expect(res.ok()).toBeFalsy();
 });
 
-test('an archive with no scan directories is refused rather than silently doing nothing', async () => {
+test('an archive with no scan directories answers 204 No Content and creates nothing', async () => {
     // Someone who zips their data one level too deep, which is the single most
     // likely mistake with this importer, must not be told the import
-    // succeeded. Either the archive is refused, or the session it promised is
-    // created.
+    // succeeded. The upload itself worked, so the importer answers 204 rather
+    // than an error, and 204 rather than 200 so a caller can tell that nothing
+    // was imported.
 
     const empty = await buildRawArchive('val-empty', { 'readme.txt': 'no scans in here' });
     const sessionLabel = uniqueLabel('ValSessEmpty');
@@ -129,12 +130,6 @@ test('an archive with no scan directories is refused rather than silently doing 
     const created = (await api.listExperiments(PROJECT)).find(e => e.label === sessionLabel);
     if (created) await api.deleteExperimentQuietly(created.ID);
 
-    // The desired behavior, stated plainly. Either outcome is acceptable:
-    // refuse the archive, or import it and produce the session it promised.
-    // What is not acceptable is answering 200 and doing neither.
-    expect(
-        res.ok() === false || created !== undefined,
-        `the importer answered HTTP ${res.status()} and created no session "${sessionLabel}", ` +
-            'so the user was told the import worked and got nothing',
-    ).toBeTruthy();
+    expect(res.status(), 'an upload with nothing to import must say so with 204, not 200').toBe(204);
+    expect(created, 'an upload with nothing to import must not create a session').toBeUndefined();
 });

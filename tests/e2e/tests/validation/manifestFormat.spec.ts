@@ -67,7 +67,7 @@ test('a manifest saved with a byte order mark is read correctly', async () => {
     ).toBeTruthy();
 });
 
-test('a manifest with headers and no data rows is refused rather than silently doing nothing', async () => {
+test('a manifest with headers and no data rows answers 204 No Content and creates nothing', async () => {
     // The manifest route to the same outcome as the scanless directory archive
     // in uploadParameters.spec.ts. Both are covered because a fix to one code
     // path would not necessarily fix the other, and a user reaching it through
@@ -81,11 +81,8 @@ test('a manifest with headers and no data rows is refused rather than silently d
     const res = await importRaw(headersOnly);
     const after = await api.listExperiments(PROJECT);
 
-    expect(
-        res.ok() === false || after.length > before,
-        `the importer answered HTTP ${res.status()} and created nothing, so the user was told ` +
-            'the import worked and got no data',
-    ).toBeTruthy();
+    expect(res.status(), 'an upload with nothing to import must say so with 204, not 200').toBe(204);
+    expect(after, 'an upload with nothing to import must not create a session').toHaveLength(before);
 });
 
 test('two CSV files at the archive root are refused rather than one being picked', async () => {
