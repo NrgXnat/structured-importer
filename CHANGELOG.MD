@@ -80,6 +80,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them as HTML, so markup in an archive filename or a CSV manifest value (which failure messages
   can quote) ran as script in the uploader's session. Failures are now reported as "Import failed"
   and no longer point to the prearchive, which structured imports don't use.
+- CSV manifests that start with a UTF-8 byte-order mark now import. Excel's "CSV UTF-8" format
+  writes one. Previously the mark was read as part of the first column name, so the import failed
+  with a missing required column, such as `Scan ID`. Manifests that aren't valid UTF-8 are still
+  rejected, rather than imported with replacement characters.
 
 ## [1.0.0] - 2026-07-31
 
