@@ -76,6 +76,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no CSV manifest, and JVM errors such as a `NoSuchMethodError` when the plugin runs on an
   incompatible XNAT version. These errors are also logged now. Previously the asynchronous
   executor discarded the exception and the activity tab polled indefinitely.
+- The activity tab now renders structured import status messages as text. Core's renderer inserted
+  them as HTML, so markup in an archive filename or a CSV manifest value (which failure messages
+  can quote) ran as script in the uploader's session. Failures are now reported as "Import failed"
+  and no longer point to the prearchive, which structured imports don't use.
 
 ## [1.0.0] - 2026-07-31
 

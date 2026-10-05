@@ -1,10 +1,13 @@
 /*
  * Activity tab callback for structured imports.
  *
- * Core's XNAT.app.activityTab.populateArchivalDetails renders any successful
- * final message as "N session(s) successfully uploaded to ...", which garbles
- * the importer's "uploaded, but no files were imported" outcome. This callback
- * renders that outcome as a warning and defers everything else to core.
+ * This replaces core's XNAT.app.activityTab.populateArchivalDetails for
+ * structured imports. Core builds its HTML by concatenating status messages,
+ * which can carry user-supplied text such as the archive's filename or values
+ * from a CSV manifest, so this renders every message as text instead. It also
+ * renders the importer's "uploaded, but no files were imported" outcome as a
+ * warning, where core would garble it into "N session(s) successfully
+ * uploaded to ...".
  *
  * Loaded on every page through the screens/header extension point because the
  * activity tab resumes polling (and resolves this callback by name) on
@@ -17,28 +20,66 @@ var XNAT = getObject(XNAT);
     // Must match StructuredImporter.NO_FILES_IMPORTED_PREFIX.
     var NO_FILES_IMPORTED_PREFIX = 'NoFilesImported:';
 
+    var ENTRY_CLASSES = {
+        Waiting: 'info',
+        InProgress: 'info',
+        Warning: 'warning',
+        Failed: 'error',
+        Completed: 'success'
+    };
+
     XNAT.plugin = getObject(XNAT.plugin || {});
     XNAT.plugin.structuredImporter = getObject(XNAT.plugin.structuredImporter || {});
 
+    function progressDiv(clazz) {
+        return $('<div class="prog"></div>').addClass(clazz);
+    }
+
+    // The success message has the form "Archive:/archive/experiments/ID;/archive/experiments/ID...".
+    function renderSessionLinks(finalMessage) {
+        var separator = finalMessage.indexOf(':');
+        var dest = finalMessage.substring(0, separator);
+        var urls = finalMessage.substring(separator + 1).split(';');
+        var div = progressDiv('success').text(urls.length + ' session(s) successfully uploaded to ' + dest + ': ');
+        urls.forEach(function(url, i) {
+            if (i > 0) {
+                div.append(document.createTextNode(', '));
+            }
+            div.append($('<a target="_blank"></a>').attr('href', XNAT.url.rootUrl('/data' + url)).text(url.replace(/.*\//, '')));
+        });
+        return div;
+    }
+
     XNAT.plugin.structuredImporter.populateArchivalDetails = function(itemDivId, detailsTag, jsonobj, lastProgressIdx) {
+        var succeeded = jsonobj['succeeded'];
         var finalMessage = jsonobj['finalMessage'] || '';
-        if (jsonobj['succeeded'] !== true || finalMessage.indexOf(NO_FILES_IMPORTED_PREFIX) !== 0) {
-            return XNAT.app.activityTab.populateArchivalDetails(itemDivId, detailsTag, jsonobj, lastProgressIdx);
+        var payload = jsonobj['payload'] ? JSON.parse(jsonobj['payload']) : null;
+        var entryList = payload ? (payload['entryList'] || []) : [];
+        var noFilesImported = succeeded === true && finalMessage.indexOf(NO_FILES_IMPORTED_PREFIX) === 0;
+
+        var divs = [];
+        entryList.forEach(function(entry, i) {
+            if (i <= lastProgressIdx) {
+                return;
+            }
+            lastProgressIdx = i;
+            var message = entry.message || '';
+            // The terminal entry carrying the prefixed message is replaced by the warning below.
+            if (noFilesImported && message === finalMessage) {
+                return;
+            }
+            divs.push(progressDiv(ENTRY_CLASSES[entry.status]).text(message.charAt(0).toUpperCase() + message.substr(1)));
+        });
+
+        if (noFilesImported) {
+            divs.push(progressDiv('warning').text(finalMessage.substring(NO_FILES_IMPORTED_PREFIX.length)));
+        } else if (succeeded === true) {
+            divs.push(renderSessionLinks(finalMessage));
+        } else if (succeeded === false) {
+            divs.push(progressDiv('error').text('Import failed: ' + finalMessage));
         }
 
-        // Let core render the progress entries, minus the terminal entry
-        // carrying the prefixed message, then add the outcome ourselves.
-        var payload = JSON.parse(jsonobj['payload']) || {};
-        payload['entryList'] = (payload['entryList'] || []).filter(function(entry) {
-            return entry.message !== finalMessage;
-        });
-        var rtn = XNAT.app.activityTab.populateArchivalDetails(itemDivId, detailsTag,
-            $.extend({}, jsonobj, {succeeded: null, payload: JSON.stringify(payload)}), lastProgressIdx);
-
-        $(detailsTag).append($('<div class="prog warning"></div>').text(finalMessage.substring(NO_FILES_IMPORTED_PREFIX.length)));
-
-        // Core returns an array (not an object) when there are no entries to render.
-        var idx = rtn && rtn.lastProgressIdx !== undefined ? rtn.lastProgressIdx : lastProgressIdx;
-        return {succeeded: true, lastProgressIdx: idx};
+        $(detailsTag).append(divs);
+        return {succeeded: succeeded === undefined ? null : succeeded, lastProgressIdx: lastProgressIdx};
     };
 })();
