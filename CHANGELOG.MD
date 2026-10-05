@@ -73,8 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Any import failure now publishes a terminal failure status, so the activity tab stops polling and
   shows the error. This includes errors raised by the CSV manifest service, such as an archive with
-  no CSV manifest. Previously the asynchronous executor discarded the exception and the activity
-  tab polled indefinitely.
+  no CSV manifest, and JVM errors such as a `NoSuchMethodError` when the plugin runs on an
+  incompatible XNAT version. These errors are also logged now. Previously the asynchronous
+  executor discarded the exception and the activity tab polled indefinitely.
 
 ## [1.0.0] - 2026-07-31
 

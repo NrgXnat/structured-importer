@@ -84,6 +84,8 @@ public class StructuredImporter extends ImporterHandlerA {
     private final String                    sessionLabel;
     private final String                    primaryModality;
 
+    private boolean terminalStatusPublished;
+
     public StructuredImporter(final Object listenerControl, final UserI user,
                               final FileWriterWrapperI fileWriter,
                               final Map<String, Object> parameters) throws ClientException {
@@ -140,7 +142,7 @@ public class StructuredImporter extends ImporterHandlerA {
                 // gets 204 No Content, which the core Importer resource sets from the exception's status.
                 final String message = "The archive " + getFilename() + " was uploaded successfully, but no files were imported because no scan resources were found in it.";
                 log.warn("No scan resources found in {}, nothing imported", getFilename());
-                completed(NO_FILES_IMPORTED_PREFIX + message, true);
+                publishCompleted(NO_FILES_IMPORTED_PREFIX + message);
                 throw new ClientException(Status.SUCCESS_NO_CONTENT, message);
             }
             if (uris.size() == 1) {
@@ -148,7 +150,7 @@ public class StructuredImporter extends ImporterHandlerA {
             } else {
                 log.info("Completed import of {} sessions:\n * {}", uris.size(), String.join("\n * ", uris));
             }
-            completed("Archive:" + String.join(";", uris), true);
+            publishCompleted("Archive:" + String.join(";", uris));
             return uris;
         } catch (ClientException e) {
             throw reportFailure(e);
@@ -161,7 +163,14 @@ public class StructuredImporter extends ImporterHandlerA {
             throw reportFailure(new ClientException("An error was found in the file " + getFilename() + ": " + e.getMessage(), e));
         } catch (RuntimeException e) {
             throw reportFailure(new ServerException("An unexpected error occurred importing the file " + getFilename() + ": " + e.getMessage(), e));
+        } catch (Error e) {
+            // Usually a NoSuchMethodError or NoClassDefFoundError from running against a different XNAT version
+            throw reportFailure(e, "A system error occurred importing the file " + getFilename() + ": " + e);
         } finally {
+            if (!terminalStatusPublished) {
+                // Only reached when publishing the failure above itself failed, e.g. while out of memory
+                publishFailed("The import of the file " + getFilename() + " ended unexpectedly");
+            }
             final File workingDir = getWorkingDirectory().toFile();
             if (workingDir.exists()) {
                 try {
@@ -175,17 +184,39 @@ public class StructuredImporter extends ImporterHandlerA {
     }
 
     /**
-     * Publishes a terminal failure status for the exception before it's rethrown. When the import runs
-     * asynchronously (the compressed uploader), the executor discards the exception, so without this the
-     * activity tab never learns the import ended. The 204 "no files imported" exception already published
-     * its own terminal status, so it's passed through untouched.
+     * Publishes a terminal failure status for the throwable before it's rethrown. When the import runs
+     * asynchronously (the compressed uploader), the executor discards the throwable, so without this the
+     * activity tab never learns the import ended. Nothing is published when a terminal status already went
+     * out, such as for the 204 "no files imported" exception.
      */
-    private <E extends Exception> E reportFailure(final E exception) {
-        if (!(exception instanceof ClientException && Status.SUCCESS_NO_CONTENT.equals(((ClientException) exception).getStatus()))) {
-            log.error("Import of {} failed", getFilename(), exception);
-            failed(StringUtils.defaultIfBlank(exception.getMessage(), exception.getClass().getSimpleName()), true);
+    private <T extends Throwable> T reportFailure(final T throwable) {
+        return reportFailure(throwable, StringUtils.defaultIfBlank(throwable.getMessage(), throwable.getClass().getSimpleName()));
+    }
+
+    private <T extends Throwable> T reportFailure(final T throwable, final String message) {
+        if (!terminalStatusPublished) {
+            log.error("Import of {} failed", getFilename(), throwable);
+            publishFailed(message);
         }
-        return exception;
+        return throwable;
+    }
+
+    private void publishCompleted(final String message) {
+        completed(message, true);
+        terminalStatusPublished = true;
+    }
+
+    /**
+     * Publishes a terminal failure status. This is best-effort: it's called while handling another throwable,
+     * which must not be masked if publishing fails too.
+     */
+    private void publishFailed(final String message) {
+        try {
+            failed(message, true);
+            terminalStatusPublished = true;
+        } catch (Throwable t) {
+            log.error("Unable to publish the failure status for the import of {}: {}", getFilename(), message, t);
+        }
     }
 
     private Map<SessionContext, Map<ScanResource, List<Path>>> groupBySession(final Map<ScanResource, List<Path>> resources) throws ClientException {
