@@ -132,8 +132,14 @@ public class StructuredImporter extends ImporterHandlerA {
             final Map<SessionContext, Map<ScanResource, List<Path>>> grouped = groupBySession(resources);
             processing("Grouped resources into " + grouped.size() + " session(s)");
 
-            final List<String> uris = new ArrayList<>();
+            // Group every session's resources by scan before saving anything, so a conflict leaves no partial import
+            final Map<SessionContext, Map<String, Map<ScanResource, List<Path>>>> scansBySession = new LinkedHashMap<>();
             for (final Map.Entry<SessionContext, Map<ScanResource, List<Path>>> entry : grouped.entrySet()) {
+                scansBySession.put(entry.getKey(), ScanGrouper.group(entry.getKey().getSessionLabel(), entry.getValue()));
+            }
+
+            final List<String> uris = new ArrayList<>();
+            for (final Map.Entry<SessionContext, Map<String, Map<ScanResource, List<Path>>>> entry : scansBySession.entrySet()) {
                 uris.add(createSession(entry.getKey(), entry.getValue()));
             }
             if (uris.isEmpty()) {
@@ -234,10 +240,11 @@ public class StructuredImporter extends ImporterHandlerA {
         return new SessionContext(subject, session);
     }
 
-    private String createSession(final SessionContext context, final Map<ScanResource, List<Path>> resources) throws ClientException, ServerException {
+    private String createSession(final SessionContext context, final Map<String, Map<ScanResource, List<Path>>> scans) throws ClientException, ServerException {
         final String               subjectLabel = context.getSubjectLabel();
         final String               sessionLabel = context.getSessionLabel();
-        final XnatSubjectdata      subject      = getOrCreateSubject(subjectLabel, resources.keySet());
+        final List<ScanResource>   resources    = scans.values().stream().flatMap(scan -> scan.keySet().stream()).collect(Collectors.toList());
+        final XnatSubjectdata      subject      = getOrCreateSubject(subjectLabel, resources);
         final XnatImagesessiondata session      = createNewSession();
 
         try {
@@ -247,16 +254,15 @@ public class StructuredImporter extends ImporterHandlerA {
             session.setLabel(sessionLabel);
             session.setModality(getPrimaryModality());
             CustomPropertyApplier.applyProperties(session, PropertyTargets.TargetType.SESSION,
-                                                  CustomPropertyApplier.collectProperties(resources.keySet(), PropertyTargets.TargetType.SESSION, getModalityDataTypes()),
+                                                  CustomPropertyApplier.collectProperties(resources, PropertyTargets.TargetType.SESSION, getModalityDataTypes()),
                                                   getModalityDataTypes());
 
             SaveItemHelper.authorizedSave(session, getUser(), false, false, EventUtils.newEventInstance(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_FORM, "Created session " + sessionLabel + " for subject " + subjectLabel + " in project " + getProjectId()));
 
-            for (final Map.Entry<ScanResource, List<Path>> entry : resources.entrySet()) {
-                final ScanResource resource = entry.getKey();
-                final List<Path>   sources  = entry.getValue();
-
-                final XnatImagescandata scan = createScanObject(resource.getModality());
+            for (final Map<ScanResource, List<Path>> scanResources : scans.values()) {
+                // ScanGrouper guarantees every resource of the scan carries the same scan-level values
+                final ScanResource      resource = scanResources.keySet().iterator().next();
+                final XnatImagescandata scan     = createScanObject(resource.getModality());
                 scan.setImageSessionId(session.getId());
                 scan.setId(resource.getScanId());
                 scan.setSeriesDescription(StringUtils.defaultIfBlank(resource.getSeriesDescription(), resource.getScanId()));
@@ -271,16 +277,9 @@ public class StructuredImporter extends ImporterHandlerA {
                 SaveItemHelper.authorizedSave(scan, getUser(), false, false, EventUtils.newEventInstance(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_FORM, "Created scan " + scan.getId() + " on session " + sessionLabel + " in project " + getProjectId()));
                 log.info("Created scan {} for session {}", scan.getId(), session.getId());
 
-                final XnatResourcecatalog catalog = createResourceCatalog(session.getId(), scan.getId(), resource.getName());
-                log.info("Created catalog for resource {} on session {} scan {} at {}", resource.getName(), session.getId(), scan.getId(), catalog.getUri());
-
-                final Path target = Paths.get(catalog.getUri()).getParent();
-                log.info("Moving {} source(s) for resource {} into {}", sources.size(), resource.getName(), target);
-                moveResourceFiles(sources, target);
-
-                final String resourceUri = "/archive/experiments/" + session.getId() + "/scans/" + scan.getId() + "/resources/" + resource.getName();
-                log.info("Refreshing catalog at {} via URI {}", catalog.getUri(), resourceUri);
-                catalogService.refreshResourceCatalog(getUser(), resourceUri, CatalogService.Operation.All);
+                for (final Map.Entry<ScanResource, List<Path>> entry : scanResources.entrySet()) {
+                    createResource(session.getId(), scan.getId(), entry.getKey().getName(), entry.getValue());
+                }
             }
         } catch (ClientException e) {
             throw e;
@@ -289,6 +288,19 @@ public class StructuredImporter extends ImporterHandlerA {
         }
 
         return UriParserUtils.getArchiveUri(session);
+    }
+
+    private void createResource(final String sessionId, final String scanId, final String name, final List<Path> sources) throws Exception {
+        final XnatResourcecatalog catalog = createResourceCatalog(sessionId, scanId, name);
+        log.info("Created catalog for resource {} on session {} scan {} at {}", name, sessionId, scanId, catalog.getUri());
+
+        final Path target = Paths.get(catalog.getUri()).getParent();
+        log.info("Moving {} source(s) for resource {} into {}", sources.size(), name, target);
+        moveResourceFiles(sources, target);
+
+        final String resourceUri = "/archive/experiments/" + sessionId + "/scans/" + scanId + "/resources/" + name;
+        log.info("Refreshing catalog at {} via URI {}", catalog.getUri(), resourceUri);
+        catalogService.refreshResourceCatalog(getUser(), resourceUri, CatalogService.Operation.All);
     }
 
     private void moveResourceFiles(final List<Path> sources, final Path target) throws IOException {

@@ -1,5 +1,6 @@
 package org.nrg.xnatx.plugins.structimport.services.impl.csv;
 
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -28,12 +29,12 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -43,7 +44,9 @@ import java.util.regex.PatternSyntaxException;
  * Identifies scan resources from a CSV manifest at the root of the extracted
  * archive. Each row identifies a source path (file or directory) and the scan
  * context it belongs to. Multiple rows aggregate to the same resource when
- * subject, session, scan, modality, and resource name all match.
+ * subject, session, scan, and resource name all match. Rows describing the same
+ * scan must agree on its modality and other scan-level values, just as rows
+ * describing the same subject or session must agree on theirs.
  *
  * <p>The mapping between CSV columns and XNAT object properties is supplied by
  * the {@link CsvImportConfigService}, resolved against the target project
@@ -113,18 +116,28 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
         return csvs.get(0);
     }
 
+    /**
+     * Rows are read in two passes. The first validates each row and merges its
+     * values into the subject, session, or scan they describe, failing when two
+     * rows disagree; a blank cell never conflicts. The second builds each row's
+     * {@link ScanResource} from those merged values, so every resource of a scan
+     * carries the same scan-level metadata and rows aggregate by subject,
+     * session, scan, and resource name alone.
+     */
     private Map<ScanResource, List<Path>> parseRows(final CSVParser parser, final Path root, final MappingContext context) {
-        final Set<String>                   header    = parser.getHeaderMap().keySet();
-        final Map<ScanResource, List<Path>> resources = new LinkedHashMap<>();
+        final Set<String>       header = parser.getHeaderMap().keySet();
+        final List<ManifestRow> rows   = new ArrayList<>();
+        final MergedValues      merged = new MergedValues();
 
         for (final CSVRecord record : parser) {
             context.validateRow(record, header);
+            final long rowNumber = record.getRecordNumber();
 
             final String subjectLabel      = context.value(record, header, CsvImportConfigService.PROP_SUBJECT_ID);
             final String sessionLabel      = context.value(record, header, CsvImportConfigService.PROP_SESSION_LABEL);
             final String scanId            = context.value(record, header, CsvImportConfigService.PROP_SCAN_ID);
             final String modality          = context.value(record, header, CsvImportConfigService.PROP_MODALITY);
-            validateModality(modality, record.getRecordNumber());
+            validateModality(modality, rowNumber);
             final String seriesDescription = context.value(record, header, CsvImportConfigService.PROP_SERIES_DESCRIPTION);
             final String resourceValue     = context.value(record, header, CsvImportConfigService.PROP_RESOURCE_NAME);
             final String name              = StringUtils.isNotBlank(resourceValue) ? resourceValue : DEFAULT_RESOURCE_NAME;
@@ -134,23 +147,46 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
             final Double    subjectWeight = parseDouble(record, context.column(CsvImportConfigService.PROP_SUBJECT_WEIGHT), header);
 
             final String pathValue  = required(record, context.getPathColumn());
-            final Path   sourcePath = resolveAndValidatePath(root, pathValue, record.getRecordNumber());
+            final Path   sourcePath = resolveAndValidatePath(root, pathValue, rowNumber);
+
+            final ManifestRow row = new ManifestRow(subjectLabel, sessionLabel, scanId, name, sourcePath);
+            rows.add(row);
+
+            merged.merge(row.owner(PropertyTargets.TargetType.SCAN), CsvImportConfigService.PROP_MODALITY, context.label(CsvImportConfigService.PROP_MODALITY), modality, rowNumber);
+            merged.merge(row.owner(PropertyTargets.TargetType.SCAN), CsvImportConfigService.PROP_SERIES_DESCRIPTION, context.label(CsvImportConfigService.PROP_SERIES_DESCRIPTION), seriesDescription, rowNumber);
+            merged.merge(row.owner(PropertyTargets.TargetType.SCAN), CsvImportConfigService.PROP_START_DATE, context.label(CsvImportConfigService.PROP_START_DATE), startDate, rowNumber);
+            merged.merge(row.owner(PropertyTargets.TargetType.SCAN), CsvImportConfigService.PROP_START_TIME, context.label(CsvImportConfigService.PROP_START_TIME), startTime, rowNumber);
+            merged.merge(row.owner(PropertyTargets.TargetType.SUBJECT), CsvImportConfigService.PROP_SUBJECT_WEIGHT, context.label(CsvImportConfigService.PROP_SUBJECT_WEIGHT), subjectWeight, rowNumber);
+            for (final Map.Entry<String, String> custom : context.getCustomColumnsByProperty().entrySet()) {
+                final String property = custom.getKey();
+                final String column   = custom.getValue();
+                merged.merge(row.owner(context.targetOf(property)), property, "\"" + column + "\" (" + property + ")", valueOrNull(record, column, header), rowNumber);
+            }
+        }
+
+        final Map<ScanResource, List<Path>> resources = new LinkedHashMap<>();
+        for (final ManifestRow row : rows) {
+            final List<Object> scan    = row.owner(PropertyTargets.TargetType.SCAN);
+            final List<Object> subject = row.owner(PropertyTargets.TargetType.SUBJECT);
 
             final Map<String, String> customProperties = new LinkedHashMap<>();
-            for (final Map.Entry<String, String> custom : context.getCustomColumnsByProperty().entrySet()) {
-                final String value = valueOrNull(record, custom.getValue(), header);
+            for (final String property : context.getCustomColumnsByProperty().keySet()) {
+                final Object value = merged.get(row.owner(context.targetOf(property)), property);
                 if (value != null) {
-                    customProperties.put(custom.getKey(), value);
+                    customProperties.put(property, (String) value);
                 }
             }
 
-            final ScanResource resource = new ScanResource(subjectLabel, sessionLabel, scanId, modality, name,
-                                                           seriesDescription, startDate, startTime, subjectWeight,
+            final ScanResource resource = new ScanResource(row.getSubjectLabel(), row.getSessionLabel(), row.getScanId(),
+                                                           (String) merged.get(scan, CsvImportConfigService.PROP_MODALITY),
+                                                           row.getName(),
+                                                           (String) merged.get(scan, CsvImportConfigService.PROP_SERIES_DESCRIPTION),
+                                                           (LocalDate) merged.get(scan, CsvImportConfigService.PROP_START_DATE),
+                                                           (LocalTime) merged.get(scan, CsvImportConfigService.PROP_START_TIME),
+                                                           (Double) merged.get(subject, CsvImportConfigService.PROP_SUBJECT_WEIGHT),
                                                            customProperties);
-            resources.computeIfAbsent(resource, k -> new ArrayList<>()).add(sourcePath);
+            resources.computeIfAbsent(resource, k -> new ArrayList<>()).add(row.getSourcePath());
         }
-
-        validateConsistency(resources.keySet(), context);
         return resources;
     }
 
@@ -246,45 +282,77 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
     }
 
     /**
-     * Across all rows that share a subject, subject-level values (weight and any
-     * SUBJECT-target custom properties) must agree; session-level custom
-     * properties must likewise agree across all rows sharing a subject and
-     * session. Per-scan fields are already keyed into the {@code ScanResource},
-     * so the map-key equality enforces agreement at aggregation time — but
-     * distinct keys whose subject- or session-level fields disagree indicate a
-     * manifest error.
+     * The coordinates of one manifest row: the subject, session, and scan it
+     * describes, the resource it contributes to, and its source path.
      */
-    private static void validateConsistency(final Iterable<ScanResource> resources, final MappingContext context) {
-        final String                    weightColumn     = context.column(CsvImportConfigService.PROP_SUBJECT_WEIGHT);
-        final Map<String, Double>       weightsBySubject = new LinkedHashMap<>();
-        final Map<List<String>, String> customByTarget   = new LinkedHashMap<>();
-        for (final ScanResource resource : resources) {
-            final String subject = resource.getSubjectLabel();
-            final Double weight  = resource.getSubjectWeight();
-            if (weight != null) {
-                final Double existing = weightsBySubject.putIfAbsent(subject, weight);
-                if (existing != null && !Objects.equals(existing, weight)) {
-                    throw new IllegalStateException("CSV manifest has inconsistent " + StringUtils.defaultIfBlank(weightColumn, "subject weight") + " values for subject \"" + subject + "\": " + existing + " vs " + weight);
-                }
-            }
-            for (final Map.Entry<String, String> entry : resource.getCustomProperties().entrySet()) {
-                final String                     property = entry.getKey();
-                final PropertyTargets.TargetType target   = context.targetOf(property);
-                if (target == PropertyTargets.TargetType.SCAN) {
-                    continue;
-                }
-                final List<String> key = target == PropertyTargets.TargetType.SUBJECT
-                                         ? Arrays.asList(property, subject)
-                                         : Arrays.asList(property, subject, resource.getSessionLabel());
-                final String existing = customByTarget.putIfAbsent(key, entry.getValue());
-                if (existing != null && !existing.equals(entry.getValue())) {
-                    final String column = context.getCustomColumnsByProperty().get(property);
-                    throw new IllegalStateException("CSV manifest has inconsistent values in column \"" + column + "\" (" + property + ") for subject \"" + subject + "\""
-                                                    + (target == PropertyTargets.TargetType.SESSION ? " session \"" + resource.getSessionLabel() + "\"" : "")
-                                                    + ": \"" + existing + "\" vs \"" + entry.getValue() + "\"");
-                }
+    @Value
+    private static class ManifestRow {
+        String subjectLabel;
+        String sessionLabel;
+        String scanId;
+        String name;
+        Path   sourcePath;
+
+        /**
+         * Identifies the subject, session, or scan this row describes, which is
+         * the owner of any value the row supplies for that target.
+         */
+        private List<Object> owner(final PropertyTargets.TargetType target) {
+            switch (target) {
+                case SUBJECT:
+                    return Arrays.asList(target, subjectLabel);
+                case SESSION:
+                    return Arrays.asList(target, subjectLabel, sessionLabel);
+                default:
+                    return Arrays.asList(target, subjectLabel, sessionLabel, scanId);
             }
         }
+    }
+
+    /**
+     * Collects each subject-, session-, and scan-level value from every row that
+     * describes the same subject, session, or scan. Rows may leave a value blank,
+     * but two rows that supply different values cannot both be honored, so the
+     * manifest is rejected rather than one value silently winning.
+     */
+    private static final class MergedValues {
+
+        private final Map<List<Object>, Map<String, RowValue>> valuesByOwner = new LinkedHashMap<>();
+
+        /**
+         * @param field the property the value supplies, which identifies it within its owner
+         * @param label how the value's column is named in error messages
+         */
+        private void merge(final List<Object> owner, final String field, final String label, final Object value, final long rowNumber) {
+            if (value == null) {
+                return;
+            }
+            final RowValue existing = valuesByOwner.computeIfAbsent(owner, k -> new LinkedHashMap<>()).putIfAbsent(field, new RowValue(value, rowNumber));
+            if (existing != null && !existing.getValue().equals(value)) {
+                throw new IllegalStateException("CSV rows " + existing.getRowNumber() + " and " + rowNumber + " have inconsistent values in column " + label
+                                                + " for " + describe(owner) + ": \"" + existing.getValue() + "\" vs \"" + value + "\"");
+            }
+        }
+
+        private Object get(final List<Object> owner, final String field) {
+            final RowValue value = valuesByOwner.getOrDefault(owner, Collections.emptyMap()).get(field);
+            return value == null ? null : value.getValue();
+        }
+
+        private static String describe(final List<Object> owner) {
+            final List<String> parts = new ArrayList<>();
+            final String[]     names = {"subject", "session", "scan"};
+            for (int index = 1; index < owner.size(); index++) {
+                parts.add(names[index - 1] + " \"" + owner.get(index) + "\"");
+            }
+            return String.join(" ", parts);
+        }
+    }
+
+    @Value
+    private static class RowValue {
+        Object value;
+        long   rowNumber;
     }
 
     /**
@@ -366,6 +434,10 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
 
         private String column(final String property) {
             return columnByProperty.get(property.toLowerCase(Locale.ROOT));
+        }
+
+        private String label(final String property) {
+            return "\"" + column(property) + "\"";
         }
 
         private String value(final CSVRecord record, final Set<String> header, final String property) {
