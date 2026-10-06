@@ -20,6 +20,20 @@ alongside the data it describes::
     └── scan2/
         └── file1.nii
 
+The manifest may also sit inside a single top-level folder, which is what you
+get when you compress a folder rather than its contents::
+
+    archive.zip
+    └── study/
+        ├── manifest.csv
+        └── scan1/
+            └── ...
+
+The manifest's folder is then treated as the archive root. Hidden files and the
+``__MACOSX`` folder that macOS adds to zip files are ignored when looking for
+the manifest. A CSV file in a subfolder is not used if the archive root holds
+anything else.
+
 Each row of the manifest names a source file or directory (relative to the
 archive root) and the scan, session, and subject context it belongs to.
 
@@ -141,7 +155,8 @@ error — including the offending row and column where applicable — when:
 * a path is absolute, escapes the archive root, or does not exist;
 * the same subject is given inconsistent subject-weight values across rows, or a
   session- or subject-level custom property is given inconsistent values;
-* no CSV manifest, or more than one, is found at the archive root.
+* no CSV manifest, or more than one, is found at the archive root (or in its
+  single top-level folder).
 
 When to use it
 --------------

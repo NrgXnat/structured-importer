@@ -80,6 +80,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them as HTML, so markup in an archive filename or a CSV manifest value (which failure messages
   can quote) ran as script in the uploader's session. Failures are now reported as "Import failed"
   and no longer point to the prearchive, which structured imports don't use.
+- A CSV manifest inside a single top-level folder is now found, so archives made by compressing a
+  folder, rather than its contents, import correctly; manifest paths are relative to that folder.
+  Previously the manifest was only looked for at the archive root, so such an archive failed with
+  "No CSV manifest" or, with Customize labeling, was read as a directory layout and imported
+  nothing. Hidden files and the `__MACOSX` folder macOS adds to zips are ignored while looking.
 
 ## [1.0.0] - 2026-07-31
 
