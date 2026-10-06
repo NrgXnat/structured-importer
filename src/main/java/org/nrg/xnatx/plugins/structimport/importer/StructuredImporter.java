@@ -33,6 +33,7 @@ import org.nrg.xnatx.plugins.structimport.models.PropertyTargets;
 import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService.ScanResource;
+import org.restlet.data.Status;
 
 import java.io.File;
 import java.io.IOException;
@@ -58,6 +59,7 @@ import static org.nrg.xft.event.XftItemEventI.CREATE;
 public class StructuredImporter extends ImporterHandlerA {
     public static final String IMPORTER_HANDLER          = "Structured-Zip";
     public static final String PARAM_RESOURCE_IDENTIFIER = ResourceIdentifierSelector.PARAM_RESOURCE_IDENTIFIER;
+    public static final String NO_FILES_IMPORTED_PREFIX  = "NoFilesImported:";
 
     private static final String EXTRACTED_FOLDER       = "extracted";
     private static final String PARAM_PROJECT          = "project";
@@ -81,6 +83,8 @@ public class StructuredImporter extends ImporterHandlerA {
     private final String                    subjectLabel;
     private final String                    sessionLabel;
     private final String                    primaryModality;
+
+    private boolean terminalStatusPublished;
 
     public StructuredImporter(final Object listenerControl, final UserI user,
                               final FileWriterWrapperI fileWriter,
@@ -133,20 +137,40 @@ public class StructuredImporter extends ImporterHandlerA {
                 uris.add(createSession(entry.getKey(), entry.getValue()));
             }
             if (uris.isEmpty()) {
-                log.warn("Tried to import sessions from {} but didn't find anything actionable", getFilename());
-                failed("Tried to import sessions from " + getFilename() + " but didn't find anything actionable", true);
-            } else {
-                if (uris.size() == 1) {
-                    log.info("Completed import of session {}", uris.get(0));
-                } else {
-                    log.info("Completed import of {} sessions:\n * {}", uris.size(), String.join("\n * ", uris));
-                }
-                completed("Archive:" + String.join(";", uris), true);
+                // The upload itself succeeded, so report that rather than a failure: the activity tab gets a
+                // terminal non-failure message (rendered by importActivity.js) and a synchronous request
+                // gets 204 No Content, which the core Importer resource sets from the exception's status.
+                final String message = "The archive " + getFilename() + " was uploaded successfully, but no files were imported because no scan resources were found in it.";
+                log.warn("No scan resources found in {}, nothing imported", getFilename());
+                publishCompleted(NO_FILES_IMPORTED_PREFIX + message);
+                throw new ClientException(Status.SUCCESS_NO_CONTENT, message);
             }
+            if (uris.size() == 1) {
+                log.info("Completed import of session {}", uris.get(0));
+            } else {
+                log.info("Completed import of {} sessions:\n * {}", uris.size(), String.join("\n * ", uris));
+            }
+            publishCompleted("Archive:" + String.join(";", uris));
             return uris;
+        } catch (ClientException e) {
+            throw reportFailure(e);
+        } catch (ServerException e) {
+            throw reportFailure(e);
         } catch (IOException e) {
-            throw new ClientException("Unable to read data from file " + getFilename(), e);
+            throw reportFailure(new ClientException("Unable to read data from file " + getFilename() + ": " + e.getMessage(), e));
+        } catch (IllegalStateException e) {
+            // Resource identifier services report manifest and configuration problems this way
+            throw reportFailure(new ClientException("An error was found in the file " + getFilename() + ": " + e.getMessage(), e));
+        } catch (RuntimeException e) {
+            throw reportFailure(new ServerException("An unexpected error occurred importing the file " + getFilename() + ": " + e.getMessage(), e));
+        } catch (Error e) {
+            // Usually a NoSuchMethodError or NoClassDefFoundError from running against a different XNAT version
+            throw reportFailure(e, "A system error occurred importing the file " + getFilename() + ": " + e);
         } finally {
+            if (!terminalStatusPublished) {
+                // Only reached when publishing the failure above itself failed, e.g. while out of memory
+                publishFailed("The import of the file " + getFilename() + " ended unexpectedly");
+            }
             final File workingDir = getWorkingDirectory().toFile();
             if (workingDir.exists()) {
                 try {
@@ -156,6 +180,42 @@ public class StructuredImporter extends ImporterHandlerA {
                     log.warn("Could not delete temporary folder: {}", getWorkingDirectory(), e);
                 }
             }
+        }
+    }
+
+    /**
+     * Publishes a terminal failure status for the throwable before it's rethrown. When the import runs
+     * asynchronously (the compressed uploader), the executor discards the throwable, so without this the
+     * activity tab never learns the import ended. Nothing is published when a terminal status already went
+     * out, such as for the 204 "no files imported" exception.
+     */
+    private <T extends Throwable> T reportFailure(final T throwable) {
+        return reportFailure(throwable, StringUtils.defaultIfBlank(throwable.getMessage(), throwable.getClass().getSimpleName()));
+    }
+
+    private <T extends Throwable> T reportFailure(final T throwable, final String message) {
+        if (!terminalStatusPublished) {
+            log.error("Import of {} failed", getFilename(), throwable);
+            publishFailed(message);
+        }
+        return throwable;
+    }
+
+    private void publishCompleted(final String message) {
+        completed(message, true);
+        terminalStatusPublished = true;
+    }
+
+    /**
+     * Publishes a terminal failure status. This is best-effort: it's called while handling another throwable,
+     * which must not be masked if publishing fails too.
+     */
+    private void publishFailed(final String message) {
+        try {
+            failed(message, true);
+            terminalStatusPublished = true;
+        } catch (Throwable t) {
+            log.error("Unable to publish the failure status for the import of {}: {}", getFilename(), message, t);
         }
     }
 

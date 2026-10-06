@@ -1,0 +1,2 @@
+## The ?v= query parameter busts browser caches; bump it whenever the script changes.
+<script src="$content.getURI("/scripts/xnat/plugin/structured-importer/importActivity.js?v=1.0.0")"></script>

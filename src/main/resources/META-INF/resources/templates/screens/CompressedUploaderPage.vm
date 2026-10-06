@@ -347,7 +347,9 @@
                     processData: false,
                     cache: false,
                     success: function() {
-                        XNAT.app.activityTab.start('Upload extraction/review for archival', uploadID);
+                        // Structured imports use a callback that can report an upload that imported no files.
+                        var callbackPath = handler === 'Structured-Zip' ? 'XNAT.plugin.structuredImporter.populateArchivalDetails' : undefined;
+                        XNAT.app.activityTab.start('Upload extraction/review for archival', uploadID, callbackPath);
                     },
                     error: function(xhr) {
                         errorHandler(xhr, 'Issue requesting archival of your data');
