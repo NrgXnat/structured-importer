@@ -13,6 +13,7 @@ import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService.ScanResource;
 
 import java.io.IOException;
+import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,6 +32,7 @@ import java.util.stream.Stream;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.hasItem;
+import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -132,6 +134,36 @@ public class CsvBasedResourceIdentifierServiceTest {
         assertThat(key.getStartDate(), equalTo(LocalDate.of(2026, 1, 2)));
         assertThat(key.getStartTime(), equalTo(LocalTime.of(14, 45)));
         assertThat(key.getName(), equalTo("NIFTI"));
+    }
+
+    @Test
+    public void parsesManifestWithByteOrderMark() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("a.nii");
+        final byte[] bom     = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+        final byte[] content = ("Scan ID,Modality,Series Description,Session Label,Subject ID,Start Date,Start Time,Subject Weight (g),Resource Name,Path\n" +
+                                "1,MR,T1,SES,SUBJ,01/02/2026,10:30 AM,25.5,NIFTI,a.nii\n").getBytes(StandardCharsets.UTF_8);
+        final byte[] bytes   = new byte[bom.length + content.length];
+        System.arraycopy(bom, 0, bytes, 0, bom.length);
+        System.arraycopy(content, 0, bytes, bom.length, content.length);
+        writeCsvBytes(bytes);
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
+        assertThat(result.size(), is(1));
+        assertThat(result.keySet().iterator().next().getScanId(), equalTo("1"));
+    }
+
+    @Test
+    public void invalidUtf8ManifestThrows() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("a.nii");
+        writeCsvBytes(("Scan ID,Modality,Series Description,Session Label,Subject ID,Start Date,Start Time,Subject Weight (g),Resource Name,Path\n" +
+                       "1,MR,Café,SES,SUBJ,01/02/2026,10:30 AM,25.5,NIFTI,a.nii\n").getBytes(StandardCharsets.ISO_8859_1));
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("Unable to read CSV manifest"));
+        thrown.expectCause(instanceOf(MalformedInputException.class));
+        service.extractResource(root, user, "PROJ");
     }
 
     @Test
@@ -639,7 +671,11 @@ public class CsvBasedResourceIdentifierServiceTest {
 
     private void writeCsv(final String... lines) throws IOException {
         final String content = String.join("\n", lines) + "\n";
-        Files.write(root.resolve("manifest.csv"), content.getBytes(StandardCharsets.UTF_8));
+        writeCsvBytes(content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void writeCsvBytes(final byte[] content) throws IOException {
+        Files.write(root.resolve("manifest.csv"), content);
     }
 
     private void touch(final String relative) throws IOException {
