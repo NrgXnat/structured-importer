@@ -100,7 +100,8 @@ followed by the path of the property within that data type — for example,
      - ``xnat:imageScanData``; ``xnat:mrScanData``, ``xnat:petScanData``,
        ``xnat:ctScanData``, ``xnat:srScanData``
      - The generic root applies to scans of any modality; a modality-specific
-       root must match the scan's modality or the import fails.
+       root must match the scan's modality or the import fails. Values must
+       agree across all rows of the same scan.
    * - Session
      - ``xnat:imageSessionData``; ``xnat:mrSessionData``, ``xnat:petSessionData``,
        ``xnat:ctSessionData``
@@ -110,16 +111,19 @@ followed by the path of the property within that data type — for example,
      - Values must agree across all rows of the same subject, and apply only to
        subjects the import creates (existing subjects are not modified).
 
-Custom scan properties participate in row aggregation: rows combine into the same
-scan resource only when all of their custom values agree.
-
 How rows become scans
 ---------------------
 
-* **Aggregation.** Rows that share the same subject, session, scan, modality, and
-  resource name are combined into a single scan resource that contains all of
-  their paths. The first two rows in the example above describe one ``NIFTI``
+* **Aggregation.** Rows that share the same subject, session, scan, and resource
+  name are combined into a single scan resource that contains all of their
+  paths. The first two rows in the example above describe one ``NIFTI``
   resource on scan ``1`` made up of two files.
+* **Multiple resources per scan.** Rows that share the same subject, session,
+  and scan but name different resources add each resource to the same scan.
+  Every row of a scan describes that one scan, so the rows must agree on its
+  modality, series description, start date and time, and custom scan
+  properties. A value left blank in one row is taken from the other rows of the
+  same scan; two different values fail the import.
 * **Multiple sessions and subjects.** Because every row carries its own subject
   and session, a single archive can populate several subjects and sessions at
   once. If custom subject and session labels are supplied with the upload
@@ -139,6 +143,8 @@ error — including the offending row and column where applicable — when:
 * a date, time, or number cannot be parsed;
 * a modality is not configured with a scan data type;
 * a path is absolute, escapes the archive root, or does not exist;
+* rows of the same scan give it different modalities, series descriptions,
+  start dates or times, or custom scan property values;
 * the same subject is given inconsistent subject-weight values across rows, or a
   session- or subject-level custom property is given inconsistent values;
 * no CSV manifest, or more than one, is found at the archive root.

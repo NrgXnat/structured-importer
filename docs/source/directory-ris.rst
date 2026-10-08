@@ -29,6 +29,10 @@ In this example the archive contains two scans:
 Everything inside a resource directory — including any subdirectories — is
 treated as content of that resource.
 
+A scan directory may hold several resource directories, but all of them must sit
+under a single modality directory. A scan has exactly one modality, so an archive
+with, for example, both ``1/MR/NIFTI`` and ``1/CT/DICOM`` fails to import.
+
 Metadata
 --------
 
