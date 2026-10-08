@@ -129,6 +129,8 @@ var XNAT = getObject(XNAT || {});
             '<p>Mappings can be edited in the table or directly as JSON &ndash; use the <b>Edit as Table</b> / ' +
             '<b>Edit as JSON</b> buttons to switch views. In the JSON view, the configuration is saved exactly ' +
             'as entered.</p>' +
+            '<p><b>Download Template</b> downloads a blank CSV manifest with the saved column names as its ' +
+            'header row. Save your changes first to include them.</p>' +
             '<p style="margin-bottom:4px;"><b>Sample configuration (the built-in default):</b></p>' +
             '<div style="border:1px solid #ddd;border-radius:3px;background:#f7f7f7;max-height:260px;overflow:auto;">' +
             '<pre class="structured-importer-sample-json" style="margin:0;padding:8px;font-size:11px;">' + sampleJson() + '</pre>' +
@@ -376,6 +378,7 @@ var XNAT = getObject(XNAT || {});
         this.hiddenInput    = document.getElementById(opts.hiddenInputId);
         this.jsonContainer  = document.getElementById(opts.jsonContainerId);
         this.emptyHint      = opts.emptyHint || '';
+        this.templateUrl    = opts.templateUrl;
         this.rows           = [];
         this.mode           = 'table';
         this.build();
@@ -390,11 +393,16 @@ var XNAT = getObject(XNAT || {});
         container.innerHTML = '';
 
         var modeBar = document.createElement('div');
-        modeBar.style.cssText = 'margin-bottom:8px;';
+        modeBar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;';
+        var modeButtons = document.createElement('div');
         this.tableModeButton = buildModeButton('Edit as Table', function() { editor.setMode('table'); });
         this.jsonModeButton  = buildModeButton('Edit as JSON', function() { editor.setMode('json'); });
-        modeBar.appendChild(this.tableModeButton);
-        modeBar.appendChild(this.jsonModeButton);
+        modeButtons.appendChild(this.tableModeButton);
+        modeButtons.appendChild(this.jsonModeButton);
+        modeBar.appendChild(modeButtons);
+        if (this.templateUrl) {
+            modeBar.appendChild(buildTemplateLink(this.templateUrl));
+        }
         container.appendChild(modeBar);
 
         this.warningsEl = document.createElement('div');
@@ -455,6 +463,18 @@ var XNAT = getObject(XNAT || {});
             action();
         });
         return button;
+    }
+
+    // The server builds the template from the saved mappings (for a project
+    // without its own, the site-wide ones), so unsaved edits aren't included.
+    function buildTemplateLink(url) {
+        var link = document.createElement('a');
+        link.className = 'btn btn-sm';
+        link.href = url;
+        link.setAttribute('download', '');
+        link.title = 'Download a blank CSV manifest whose header row holds the saved column names';
+        link.innerHTML = '<i class="fa fa-download"></i> Download Template';
+        return link;
     }
 
     MappingsEditor.prototype.buildJsonEditor = function() {
@@ -983,6 +1003,7 @@ var XNAT = getObject(XNAT || {});
             tableContainerId: SITE_INPUT + '-table',
             hiddenInputId:    SITE_INPUT,
             jsonContainerId:  SITE_INPUT + '-json',
+            templateUrl:      siteUrl() + '/template',
             emptyHint:        'No mappings are configured. Click "Add Mapping" to begin.'
         }, siteUrl());
     };
@@ -997,6 +1018,7 @@ var XNAT = getObject(XNAT || {});
             tableContainerId: PROJECT_INPUT + '-table',
             hiddenInputId:    PROJECT_INPUT,
             jsonContainerId:  PROJECT_INPUT + '-json',
+            templateUrl:      projectUrl(projectId) + '/template',
             emptyHint:        'No project override is configured; the site-wide mappings apply. Add mappings and save to create a project-level override.'
         }, projectUrl(projectId));
         bindProjectButtons();

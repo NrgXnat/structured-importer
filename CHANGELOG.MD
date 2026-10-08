@@ -53,6 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GET /xapi/structured-importer/property-display-mappings`. Custom property paths used in
   column mappings now accept any modality-configured scan or session data type as a root
   (previously a fixed list).
+- The site and project **CSV Column Mappings** panels have a **Download Template** link that
+  downloads a blank CSV manifest whose header row holds the saved column names. A project without
+  its own mappings gets the site-wide columns. The templates are also served by new XAPI endpoints,
+  `GET /xapi/structured-importer/csv-column-mappings/template` and
+  `GET /xapi/structured-importer/projects/{projectId}/csv-column-mappings/template`.
 
 ### Changed
 
