@@ -98,6 +98,35 @@ public class ManifestAwareResourceIdentifierServiceTest {
     }
 
     @Test
+    public void csvInSingleTopLevelFolderBesideMacClutterCountsAsManifest() throws IOException {
+        Files.createDirectories(root.resolve("wrapper/1"));
+        Files.createDirectories(root.resolve("__MACOSX/wrapper"));
+        Files.write(root.resolve("__MACOSX/wrapper/._manifest.csv"), new byte[0]);
+        Files.write(root.resolve(".DS_Store"), new byte[0]);
+        Files.write(root.resolve("wrapper/manifest.csv"), "Path\n1".getBytes(StandardCharsets.UTF_8));
+
+        service.extractResource(root, user, "PROJ");
+
+        verify(csvService).extractResource(root, user, "PROJ");
+        verify(simpleService, never()).extractResource(any(Path.class), any(UserI.class), anyString());
+    }
+
+    @Test
+    public void csvInsideSingleScanDirectoryLayoutDoesNotCountAsManifest() throws IOException {
+        // a one-scan, one-modality, one-resource layout is a chain of single folders; a data CSV in the
+        // resource folder must not be mistaken for a manifest
+        Files.createDirectories(root.resolve("1/MR/NIFTI"));
+        Files.createDirectories(root.resolve("__MACOSX"));
+        Files.write(root.resolve("1/MR/NIFTI/img.nii"), new byte[0]);
+        Files.write(root.resolve("1/MR/NIFTI/physio.csv"), "time,value\n0,1".getBytes(StandardCharsets.UTF_8));
+
+        service.extractResource(root, user, "PROJ");
+
+        verify(simpleService).extractResource(root, user, "PROJ");
+        verify(csvService, never()).extractResource(any(Path.class), any(UserI.class), anyString());
+    }
+
+    @Test
     public void csvInSubdirectoryAlongsideOtherEntriesDoesNotCountAsManifest() throws IOException {
         Files.createDirectories(root.resolve("1/MR/NIFTI"));
         Files.createDirectories(root.resolve("2/MR/NIFTI"));

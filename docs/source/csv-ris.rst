@@ -29,9 +29,11 @@ get when you compress a folder rather than its contents::
         └── scan1/
             └── ...
 
-The manifest's folder is then treated as the archive root. Hidden files and the
-``__MACOSX`` folder that macOS adds to zip files are ignored when looking for
-the manifest. A CSV file in a subfolder is not used if the archive root holds
+The manifest's folder is then treated as the archive root. Only that one folder
+is searched: a manifest nested any deeper is not found. Hidden files, the
+``__MACOSX`` folder that macOS adds to zip files, and the ``Thumbs.db`` and
+``desktop.ini`` files that Windows creates are ignored when looking for the
+manifest. A CSV file in a subfolder is not used if the archive root holds
 anything else.
 
 Each row of the manifest names a source file or directory (relative to the

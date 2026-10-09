@@ -28,6 +28,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -58,7 +59,8 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
 
     static final String DEFAULT_RESOURCE_NAME = "NIFTI";
 
-    private static final String MACOS_METADATA_FOLDER = "__MACOSX";
+    // Clutter that operating systems add to archives, ignored when looking for the manifest
+    private static final Set<String> IGNORED_ENTRIES = new HashSet<>(Arrays.asList("__MACOSX", "Thumbs.db", "desktop.ini"));
 
     private static final List<DateTimeFormatter> DATE_FORMATS = Arrays.asList(
             DateTimeFormatter.ofPattern("MM/dd/yyyy"),
@@ -88,7 +90,7 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
         if (!root.equals(extractedArchive)) {
             log.info("Found the CSV manifest in the top-level folder {}; manifest paths are resolved relative to it", extractedArchive.relativize(root));
         }
-        final Path                   csv      = findManifest(root);
+        final Path                   csv      = findManifest(root, extractedArchive);
         try (final Reader reader = Files.newBufferedReader(csv);
              final CSVParser parser = CSVFormat.DEFAULT
                      .builder()
@@ -109,29 +111,29 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
      * Finds the directory that holds the CSV manifest, which manifest paths are
      * relative to. That's the archive root, unless the root holds nothing but a
      * single folder, as when a folder is zipped rather than its contents: then
-     * the search continues in that folder, through any further single-folder
-     * levels. Hidden entries and the {@code __MACOSX} folder that macOS adds to
-     * zips are ignored.
+     * the manifest may be in that folder instead. The search goes no deeper, so
+     * a CSV inside the scan or resource folders of a single-scan directory
+     * layout ({@code 1/MR/NIFTI/data.csv}) is never mistaken for a manifest.
+     * Hidden entries and archive clutter ({@code __MACOSX}, {@code Thumbs.db},
+     * {@code desktop.ini}) are ignored.
      *
      * @param extractedArchive the root of the extracted archive
      *
      * @return the directory holding the manifest, or empty when there is no manifest
      */
     public static Optional<Path> findManifestDirectory(final Path extractedArchive) {
-        Path directory = extractedArchive;
-        while (true) {
-            final List<Path> entries = listEntries(directory);
-            if (entries.stream().anyMatch(CsvBasedResourceIdentifierService::isCsv)) {
-                return Optional.of(directory);
-            }
-            if (entries.size() != 1 || !Files.isDirectory(entries.get(0))) {
-                return Optional.empty();
-            }
-            directory = entries.get(0);
+        final List<Path> entries = listEntries(extractedArchive);
+        if (entries.stream().anyMatch(CsvBasedResourceIdentifierService::isCsv)) {
+            return Optional.of(extractedArchive);
         }
+        if (entries.size() == 1 && Files.isDirectory(entries.get(0))
+            && listEntries(entries.get(0)).stream().anyMatch(CsvBasedResourceIdentifierService::isCsv)) {
+            return Optional.of(entries.get(0));
+        }
+        return Optional.empty();
     }
 
-    private static Path findManifest(final Path directory) {
+    private static Path findManifest(final Path directory, final Path extractedArchive) {
         final List<Path> csvs = new ArrayList<>();
         for (final Path entry : listEntries(directory)) {
             if (isCsv(entry)) {
@@ -139,7 +141,8 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
             }
         }
         if (csvs.size() > 1) {
-            throw new IllegalStateException("Multiple CSV files found alongside the manifest; expected exactly one: "
+            final String location = directory.equals(extractedArchive) ? "at the archive root" : "in \"" + extractedArchive.relativize(directory) + "\"";
+            throw new IllegalStateException("Multiple CSV files found " + location + "; expected exactly one: "
                                             + csvs.stream().map(csv -> csv.getFileName().toString()).sorted().collect(Collectors.joining(", ")));
         }
         return csvs.get(0);
@@ -150,7 +153,7 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
         try (final DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
             for (final Path entry : stream) {
                 final String name = entry.getFileName().toString();
-                if (!name.startsWith(".") && !name.equals(MACOS_METADATA_FOLDER)) {
+                if (!name.startsWith(".") && !IGNORED_ENTRIES.contains(name)) {
                     entries.add(entry);
                 }
             }

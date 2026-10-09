@@ -84,7 +84,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   folder, rather than its contents, import correctly; manifest paths are relative to that folder.
   Previously the manifest was only looked for at the archive root, so such an archive failed with
   "No CSV manifest" or, with Customize labeling, was read as a directory layout and imported
-  nothing. Hidden files and the `__MACOSX` folder macOS adds to zips are ignored while looking.
+  nothing. Only that one folder level is searched. Hidden files, the `__MACOSX` folder macOS adds
+  to zips, and Windows' `Thumbs.db` and `desktop.ini` are ignored while looking.
 
 ## [1.0.0] - 2026-07-31
 
