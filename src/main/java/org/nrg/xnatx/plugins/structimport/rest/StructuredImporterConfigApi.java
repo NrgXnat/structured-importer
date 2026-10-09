@@ -39,6 +39,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -66,7 +67,10 @@ import static org.springframework.web.bind.annotation.RequestMethod.POST;
 @Slf4j
 public class StructuredImporterConfigApi extends AbstractXapiRestController {
 
-    private static final String TEXT_CSV = "text/csv";
+    private static final String    TEXT_CSV      = "text/csv";
+    // The importer reads manifests as UTF-8, so templates must be written as UTF-8 too; without an
+    // explicit charset, XNAT's StringHttpMessageConverter falls back to ISO-8859-1
+    private static final MediaType TEXT_CSV_UTF8 = new MediaType("text", "csv", StandardCharsets.UTF_8);
 
     private final CsvImportConfigService  configService;
     private final ModalityDataTypeService modalityDataTypeService;
@@ -180,7 +184,7 @@ public class StructuredImporterConfigApi extends AbstractXapiRestController {
                    @ApiResponse(code = 500, message = "An unexpected error occurred.")})
     @XapiRequestMapping(value = "/csv-column-mappings/template", method = GET, restrictTo = Admin, produces = TEXT_CSV)
     public ResponseEntity<String> getSiteManifestTemplate() {
-        return manifestTemplate(siteColumnMappings(), null);
+        return manifestTemplate(templateMappings(null), null);
     }
 
     @ApiOperation(value = "Sets the site-wide CSV column mappings.")
@@ -230,8 +234,7 @@ public class StructuredImporterConfigApi extends AbstractXapiRestController {
         if (denied != null) {
             return denied;
         }
-        final List<CsvColumnMapping> projectMappings = configService.getColumnMappings(Scope.Project, projectId);
-        return manifestTemplate(projectMappings != null ? projectMappings : siteColumnMappings(), projectId);
+        return manifestTemplate(templateMappings(projectId), projectId);
     }
 
     @ApiOperation(value = "Sets the project-level CSV column mappings, overriding the site-wide configuration for this project.")
@@ -324,9 +327,27 @@ public class StructuredImporterConfigApi extends AbstractXapiRestController {
         return mappings != null ? mappings : configService.getDefaultColumnMappings();
     }
 
+    /**
+     * The mappings a template is built from, which are the ones an import would use: the
+     * project's own mappings when it has enabled ones, otherwise the site-wide mappings, otherwise
+     * the built-in defaults. Unlike {@link CsvImportConfigService#getColumnMappings(org.nrg.xft.security.UserI, String)},
+     * this never stores the defaults as a side effect of a download.
+     *
+     * @param projectId the project the template is for, or {@code null} for the site-wide template
+     */
+    List<CsvColumnMapping> templateMappings(final String projectId) {
+        if (projectId != null) {
+            final List<CsvColumnMapping> projectMappings = configService.getColumnMappings(Scope.Project, projectId);
+            if (projectMappings != null) {
+                return projectMappings;
+            }
+        }
+        return siteColumnMappings();
+    }
+
     private static ResponseEntity<String> manifestTemplate(final List<CsvColumnMapping> mappings, final String projectId) {
         return ResponseEntity.ok()
-                             .contentType(MediaType.parseMediaType(TEXT_CSV))
+                             .contentType(TEXT_CSV_UTF8)
                              .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + CsvManifestTemplate.filename(projectId, LocalDateTime.now()) + "\"")
                              .body(CsvManifestTemplate.build(mappings));
     }

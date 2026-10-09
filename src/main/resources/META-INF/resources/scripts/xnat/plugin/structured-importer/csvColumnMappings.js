@@ -401,7 +401,7 @@ var XNAT = getObject(XNAT || {});
         modeButtons.appendChild(this.jsonModeButton);
         modeBar.appendChild(modeButtons);
         if (this.templateUrl) {
-            modeBar.appendChild(buildTemplateLink(this.templateUrl));
+            modeBar.appendChild(buildTemplateButton(this.templateUrl));
         }
         container.appendChild(modeBar);
 
@@ -467,14 +467,73 @@ var XNAT = getObject(XNAT || {});
 
     // The server builds the template from the saved mappings (for a project
     // without its own, the site-wide ones), so unsaved edits aren't included.
-    function buildTemplateLink(url) {
+    function buildTemplateButton(url) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-sm';
+        button.title = 'Download a blank CSV manifest whose header row holds the saved column names';
+        button.innerHTML = '<i class="fa fa-download"></i> Download Template';
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            button.disabled = true;
+            downloadTemplate(url, function() {
+                button.disabled = false;
+            });
+        });
+        return button;
+    }
+
+    /**
+     * Fetches the template and saves it, rather than letting the browser follow
+     * a download link, so a failure is reported instead of the error or login
+     * page being saved as the .csv file. An expired session is redirected to the
+     * login page, which arrives as HTML with a 200 status, so the content type
+     * is checked as well as the status.
+     */
+    function downloadTemplate(url, done) {
+        fetch(url, { credentials: 'same-origin' })
+            .then(function(response) {
+                var contentType = response.headers.get('Content-Type') || '';
+                if (!response.ok || contentType.indexOf('text/csv') !== 0) {
+                    throw new Error(templateFailureMessage(response.status, response.ok));
+                }
+                var disposition = response.headers.get('Content-Disposition') || '';
+                var match = /filename="([^"]+)"/.exec(disposition);
+                var filename = match ? match[1] : 'struct-import-template.csv';
+                return response.blob().then(function(blob) {
+                    saveBlob(blob, filename);
+                });
+            })
+            .catch(function(error) {
+                console.error('Unable to download the CSV manifest template', error);
+                xmodal.message('Error', (error && error.message) || 'Unable to download the CSV manifest template.');
+            })
+            .then(done);
+    }
+
+    function templateFailureMessage(status, ok) {
+        if (ok || status === 401) {
+            return 'Unable to download the CSV manifest template. Your session may have expired; reload the page and log in again.';
+        }
+        if (status === 403) {
+            return 'You do not have permission to download this CSV manifest template.';
+        }
+        return 'Unable to download the CSV manifest template (status ' + status + ').';
+    }
+
+    function saveBlob(blob, filename) {
+        var objectUrl = URL.createObjectURL(blob);
         var link = document.createElement('a');
-        link.className = 'btn btn-sm';
-        link.href = url;
-        link.setAttribute('download', '');
-        link.title = 'Download a blank CSV manifest whose header row holds the saved column names';
-        link.innerHTML = '<i class="fa fa-download"></i> Download Template';
-        return link;
+        link.href = objectUrl;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        // revoke after the click has been handled so the download can start
+        setTimeout(function() {
+            URL.revokeObjectURL(objectUrl);
+        }, 0);
     }
 
     MappingsEditor.prototype.buildJsonEditor = function() {
