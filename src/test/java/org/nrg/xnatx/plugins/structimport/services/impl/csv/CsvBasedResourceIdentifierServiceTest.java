@@ -270,6 +270,99 @@ public class CsvBasedResourceIdentifierServiceTest {
     }
 
     @Test
+    public void manifestInSingleTopLevelFolderResolvesPathsRelativeToIt() throws Exception {
+        // zipping a folder, rather than its contents, wraps everything in one top-level folder
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("Study/1/slice1.bmp");
+        touch("Study/1/slice2.bmp");
+        touch("__MACOSX/Study/._manifest.csv");
+        touch(".DS_Store");
+        Files.write(root.resolve("Study/manifest.csv"), String.join("\n",
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Resource Name,Path",
+                "1,CT,Scan,SES,SUBJ,MICROCT,1").getBytes(StandardCharsets.UTF_8));
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
+
+        assertThat(result.size(), is(1));
+        assertThat(result.keySet().iterator().next().getName(), equalTo("MICROCT"));
+        assertThat(result.values().iterator().next(), equalTo(Collections.singletonList(root.resolve("Study/1"))));
+    }
+
+    @Test
+    public void manifestInSubfolderAlongsideOtherEntriesIsNotFound() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("Study/manifest.csv");
+        touch("readme.txt");
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("No CSV manifest"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void manifestTwoLevelsDownIsNotFound() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("outer/inner/manifest.csv");
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("No CSV manifest"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void multipleCsvsInTopLevelFolderNameTheFolder() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("Study/a.csv");
+        touch("Study/b.csv");
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("Multiple CSV files found in \"Study\"; expected exactly one: a.csv, b.csv"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void manifestPathEscapingTopLevelFolderThrows() throws Exception {
+        // the top-level folder becomes the root, so a path back out of it is rejected even though the
+        // target exists in the archive (a hidden file, so the root still counts as a single folder)
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch(".outside.nii");
+        Files.createDirectories(root.resolve("Study"));
+        Files.write(root.resolve("Study/manifest.csv"), String.join("\n",
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Path",
+                "1,MR,T1,SES,SUBJ,../.outside.nii").getBytes(StandardCharsets.UTF_8));
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("escapes the archive root"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void windowsClutterBesideTopLevelFolderIsIgnored() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("Study/1/a.nii");
+        touch("Thumbs.db");
+        touch("desktop.ini");
+        Files.write(root.resolve("Study/manifest.csv"), String.join("\n",
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Path",
+                "1,MR,T1,SES,SUBJ,1/a.nii").getBytes(StandardCharsets.UTF_8));
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
+        assertThat(result.size(), is(1));
+    }
+
+    @Test
+    public void hiddenCsvFilesAreIgnored() throws Exception {
+        // macOS tar archives carry AppleDouble "._" files beside the real ones
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("a.nii");
+        touch("._manifest.csv");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Path",
+                "1,MR,T1,SES,SUBJ,a.nii"
+        );
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
+        assertThat(result.size(), is(1));
+    }
+
+    @Test
     public void multipleCsvManifestsThrow() throws Exception {
         when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
         Files.write(root.resolve("a.csv"), "Path\nfoo".getBytes(StandardCharsets.UTF_8));

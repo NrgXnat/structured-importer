@@ -28,6 +28,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -38,6 +39,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 
 /**
  * Identifies scan resources from a CSV manifest at the root of the extracted
@@ -56,6 +58,9 @@ import java.util.regex.PatternSyntaxException;
 public class CsvBasedResourceIdentifierService implements ResourceIdentifierService {
 
     static final String DEFAULT_RESOURCE_NAME = "NIFTI";
+
+    // Clutter that operating systems add to archives, ignored when looking for the manifest
+    private static final Set<String> IGNORED_ENTRIES = new HashSet<>(Arrays.asList("__MACOSX", "Thumbs.db", "desktop.ini"));
 
     private static final List<DateTimeFormatter> DATE_FORMATS = Arrays.asList(
             DateTimeFormatter.ofPattern("MM/dd/yyyy"),
@@ -80,7 +85,12 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
         log.info("Identifying scan resources from CSV manifest under {}", extractedArchive);
         final List<CsvColumnMapping> mappings = configService.getColumnMappings(user, projectId);
         final MappingContext         context  = new MappingContext(mappings, modalityDataTypeService.getModalityMappings().values());
-        final Path                      csv      = findManifest(extractedArchive);
+        final Path                   root     = findManifestDirectory(extractedArchive).orElseThrow(() -> new IllegalStateException(
+                "No CSV manifest (*.csv) was found at the root of the archive or of its single top-level folder"));
+        if (!root.equals(extractedArchive)) {
+            log.info("Found the CSV manifest in the top-level folder {}; manifest paths are resolved relative to it", extractedArchive.relativize(root));
+        }
+        final Path                   csv      = findManifest(root, extractedArchive);
         try (final Reader reader = Files.newBufferedReader(csv);
              final CSVParser parser = CSVFormat.DEFAULT
                      .builder()
@@ -91,26 +101,70 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
                      .build()
                      .parse(reader)) {
             context.validateHeader(parser.getHeaderMap().keySet());
-            return parseRows(parser, extractedArchive, context);
+            return parseRows(parser, root, context);
         } catch (IOException e) {
             throw new IllegalStateException("Unable to read CSV manifest at " + csv, e);
         }
     }
 
-    private Path findManifest(final Path root) {
-        final List<Path> csvs = new ArrayList<>();
-        try (final DirectoryStream<Path> stream = Files.newDirectoryStream(root, "*.csv")) {
-            stream.forEach(csvs::add);
-        } catch (IOException e) {
-            throw new IllegalStateException("Unable to scan archive root " + root + " for CSV manifest", e);
+    /**
+     * Finds the directory that holds the CSV manifest, which manifest paths are
+     * relative to. That's the archive root, unless the root holds nothing but a
+     * single folder, as when a folder is zipped rather than its contents: then
+     * the manifest may be in that folder instead. The search goes no deeper, so
+     * a CSV inside the scan or resource folders of a single-scan directory
+     * layout ({@code 1/MR/NIFTI/data.csv}) is never mistaken for a manifest.
+     * Hidden entries and archive clutter ({@code __MACOSX}, {@code Thumbs.db},
+     * {@code desktop.ini}) are ignored.
+     *
+     * @param extractedArchive the root of the extracted archive
+     *
+     * @return the directory holding the manifest, or empty when there is no manifest
+     */
+    public static Optional<Path> findManifestDirectory(final Path extractedArchive) {
+        final List<Path> entries = listEntries(extractedArchive);
+        if (entries.stream().anyMatch(CsvBasedResourceIdentifierService::isCsv)) {
+            return Optional.of(extractedArchive);
         }
-        if (csvs.isEmpty()) {
-            throw new IllegalStateException("No CSV manifest (*.csv) found at archive root " + root);
+        if (entries.size() == 1 && Files.isDirectory(entries.get(0))
+            && listEntries(entries.get(0)).stream().anyMatch(CsvBasedResourceIdentifierService::isCsv)) {
+            return Optional.of(entries.get(0));
+        }
+        return Optional.empty();
+    }
+
+    private static Path findManifest(final Path directory, final Path extractedArchive) {
+        final List<Path> csvs = new ArrayList<>();
+        for (final Path entry : listEntries(directory)) {
+            if (isCsv(entry)) {
+                csvs.add(entry);
+            }
         }
         if (csvs.size() > 1) {
-            throw new IllegalStateException("Multiple CSV files found at archive root " + root + "; expected exactly one: " + csvs);
+            final String location = directory.equals(extractedArchive) ? "at the archive root" : "in \"" + extractedArchive.relativize(directory) + "\"";
+            throw new IllegalStateException("Multiple CSV files found " + location + "; expected exactly one: "
+                                            + csvs.stream().map(csv -> csv.getFileName().toString()).sorted().collect(Collectors.joining(", ")));
         }
         return csvs.get(0);
+    }
+
+    private static List<Path> listEntries(final Path directory) {
+        final List<Path> entries = new ArrayList<>();
+        try (final DirectoryStream<Path> stream = Files.newDirectoryStream(directory)) {
+            for (final Path entry : stream) {
+                final String name = entry.getFileName().toString();
+                if (!name.startsWith(".") && !IGNORED_ENTRIES.contains(name)) {
+                    entries.add(entry);
+                }
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to scan " + directory + " for a CSV manifest", e);
+        }
+        return entries;
+    }
+
+    private static boolean isCsv(final Path entry) {
+        return entry.getFileName().toString().endsWith(".csv") && Files.isRegularFile(entry);
     }
 
     private Map<ScanResource, List<Path>> parseRows(final CSVParser parser, final Path root, final MappingContext context) {
