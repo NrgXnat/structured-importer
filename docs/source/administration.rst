@@ -38,6 +38,14 @@ malformed edits are never silently lost). Problems such as duplicate columns or 
 column are flagged as warnings in both views, and the configuration is validated again when
 saved and at import time.
 
+**Download Template**, at the right of the view buttons, downloads a blank CSV manifest whose
+header row holds the saved column names in configuration order, ready to fill in. In a project
+without its own mappings, the template uses the site-wide mappings, since those are what imports
+into the project use. Unsaved edits are not included, so save first to get a template for them.
+The templates are also available from the XAPI at
+``GET /xapi/structured-importer/csv-column-mappings/template`` (site, administrators only) and
+``GET /xapi/structured-importer/projects/{projectId}/csv-column-mappings/template``.
+
 The **About CSV column mappings** link above the table opens a dialog describing the mapping
 fields and the supported custom property roots. The dialog includes a sample configuration
 (the built-in default) with a **Copy Sample JSON** button that copies it to the clipboard.
