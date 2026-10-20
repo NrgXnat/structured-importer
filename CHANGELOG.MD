@@ -93,6 +93,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   writes one. Previously the mark was read as part of the first column name, so the import failed
   with a missing required column, such as `Scan ID`. Manifests that aren't valid UTF-8 are still
   rejected, rather than imported with replacement characters.
+- An import now fails, naming both rows and the column, when CSV manifest rows for the same subject,
+  session, and scan disagree on the scan's modality, series description, start date or time, or a
+  custom scan property. Previously the rows were merged into one scan and the last row's values
+  silently replaced the others, including the modality and therefore the scan's data type. Rows
+  that agree, or leave a value blank, still add their resources to the same scan. The
+  directory-walking service likewise rejects a scan directory holding more than one modality
+  directory, and each scan is now created once rather than once per resource.
 
 ## [1.0.0] - 2026-07-31
 
