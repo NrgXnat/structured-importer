@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.io.input.BOMInputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.nrg.xft.security.UserI;
 import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
@@ -17,7 +18,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -83,8 +87,10 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
         log.info("Identifying scan resources from CSV manifest under {}", extractedArchive);
         final List<CsvColumnMapping> mappings = configService.getColumnMappings(user, projectId);
         final MappingContext         context  = new MappingContext(mappings, modalityDataTypeService.getModalityMappings().values());
-        final Path                      csv      = findManifest(extractedArchive);
-        try (final Reader reader = Files.newBufferedReader(csv);
+        final Path                   csv      = findManifest(extractedArchive);
+        try (final InputStream fileStream = Files.newInputStream(csv);
+             final BOMInputStream bomStream = BOMInputStream.builder().setInputStream(fileStream).get();
+             final Reader reader = new InputStreamReader(bomStream, StandardCharsets.UTF_8.newDecoder());
              final CSVParser parser = CSVFormat.DEFAULT
                      .builder()
                      .setHeader()
@@ -138,6 +144,7 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
             final String scanId            = context.value(record, header, CsvImportConfigService.PROP_SCAN_ID);
             final String modality          = context.value(record, header, CsvImportConfigService.PROP_MODALITY);
             validateModality(modality, rowNumber);
+
             final String seriesDescription = context.value(record, header, CsvImportConfigService.PROP_SERIES_DESCRIPTION);
             final String resourceValue     = context.value(record, header, CsvImportConfigService.PROP_RESOURCE_NAME);
             final String name              = StringUtils.isNotBlank(resourceValue) ? resourceValue : DEFAULT_RESOURCE_NAME;
@@ -362,12 +369,12 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
      */
     private static final class MappingContext {
 
-        private final List<CsvColumnMapping>       mappings;
-        private final Collection<ModalityMapping>  modalityMappings;
-        private final Map<String, String>          columnByProperty       = new LinkedHashMap<>();
-        private final Map<String, String>          customColumnByProperty = new LinkedHashMap<>();
-        private final Map<String, Pattern>         patternByColumn        = new LinkedHashMap<>();
-        private final String                       pathColumn;
+        private final List<CsvColumnMapping>      mappings;
+        private final Collection<ModalityMapping> modalityMappings;
+        private final Map<String, String>         columnByProperty       = new LinkedHashMap<>();
+        private final Map<String, String>         customColumnByProperty = new LinkedHashMap<>();
+        private final Map<String, Pattern>        patternByColumn        = new LinkedHashMap<>();
+        private final String                      pathColumn;
 
         private MappingContext(final List<CsvColumnMapping> mappings, final Collection<ModalityMapping> modalityMappings) {
             if (mappings == null || mappings.isEmpty()) {

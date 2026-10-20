@@ -49,6 +49,7 @@ dependencies {
     xnatProvided "io.springfox:springfox-swagger-ui"
     xnatProvided "io.projectreactor:reactor-bus"
     xnatProvided "org.apache.commons:commons-compress"
+    xnatProvided "commons-io:commons-io"
     xnatProvided "javax.validation:validation-api:2.0.1.Final"
 
     testImplementation "com.fasterxml.jackson.datatype:jackson-datatype-guava"
