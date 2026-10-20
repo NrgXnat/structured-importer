@@ -71,6 +71,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Invalid upload parameters no longer produce an **HTTP 500** with the generic servlet error page.
+  Examples include a missing `project` or `primary-modality`, an unconfigured modality, an unknown
+  project, insufficient permissions and an unknown `resourceIdentifier`. The import request now
+  returns **HTTP 400** with a message naming the missing or invalid parameter. This applies to
+  synchronous calls and to asynchronous ones (`http-session-listener`), so asynchronous calls no
+  longer return 200 "Submitted for …" for an import that can't run. The importer previously
+  validated parameters in its constructor, and XNAT builds importers reflectively, which wrapped
+  the error and discarded its status and message. Validation now runs in the importer's
+  `setIdentifier()` override, which XNAT calls directly during importer construction.
 - Any import failure now publishes a terminal failure status, so the activity tab stops polling and
   shows the error. This includes errors raised by the CSV manifest service, such as an archive with
   no CSV manifest, and JVM errors such as a `NoSuchMethodError` when the plugin runs on an
