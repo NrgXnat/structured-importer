@@ -89,6 +89,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them as HTML, so markup in an archive filename or a CSV manifest value (which failure messages
   can quote) ran as script in the uploader's session. Failures are now reported as "Import failed"
   and no longer point to the prearchive, which structured imports don't use.
+- A CSV manifest inside a single top-level folder is now found, so archives made by compressing a
+  folder, rather than its contents, import correctly; manifest paths are relative to that folder.
+  Previously the manifest was only looked for at the archive root, so such an archive failed with
+  "No CSV manifest" or, with Customize labeling, was read as a directory layout and imported
+  nothing. Only that one folder level is searched. Hidden files, the `__MACOSX` folder macOS adds
+  to zips, and Windows' `Thumbs.db` and `desktop.ini` are ignored while looking.
 - CSV manifests that start with a UTF-8 byte-order mark now import. Excel's "CSV UTF-8" format
   writes one. Previously the mark was read as part of the first column name, so the import failed
   with a missing required column, such as `Scan ID`. Manifests that aren't valid UTF-8 are still

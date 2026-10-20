@@ -21,7 +21,8 @@ How the metadata is determined depends on the resource identifier service:
 * the :doc:`directory-ris` reads the scan, modality, and resource from the folder
   layout of the archive;
 * the :doc:`csv-ris` reads the subject, session, scan, and metadata from a CSV
-  manifest packaged at the root of the archive.
+  manifest packaged at the root of the archive (or of its single top-level
+  folder).
 
 Preparing the archive
 ----------------------
@@ -32,7 +33,8 @@ resource identifier service you intend to use:
 * For the directory service, lay files out as
   ``<scanId>/<modality>/<resourceName>/`` (see :doc:`directory-ris`).
 * For the CSV service, place a single ``*.csv`` manifest at the root of the
-  archive alongside the data it describes (see :doc:`csv-ris`).
+  archive alongside the data it describes (see :doc:`csv-ris`). Compressing a
+  folder that holds the manifest and its data also works.
 
 Importing the archive
 ---------------------
