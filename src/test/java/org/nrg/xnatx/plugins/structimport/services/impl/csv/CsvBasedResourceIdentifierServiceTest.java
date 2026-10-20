@@ -13,6 +13,7 @@ import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService.ScanResource;
 
 import java.io.IOException;
+import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,6 +32,7 @@ import java.util.stream.Stream;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.hasItem;
+import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -132,6 +134,36 @@ public class CsvBasedResourceIdentifierServiceTest {
         assertThat(key.getStartDate(), equalTo(LocalDate.of(2026, 1, 2)));
         assertThat(key.getStartTime(), equalTo(LocalTime.of(14, 45)));
         assertThat(key.getName(), equalTo("NIFTI"));
+    }
+
+    @Test
+    public void parsesManifestWithByteOrderMark() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("a.nii");
+        final byte[] bom     = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+        final byte[] content = ("Scan ID,Modality,Series Description,Session Label,Subject ID,Start Date,Start Time,Subject Weight (g),Resource Name,Path\n" +
+                                "1,MR,T1,SES,SUBJ,01/02/2026,10:30 AM,25.5,NIFTI,a.nii\n").getBytes(StandardCharsets.UTF_8);
+        final byte[] bytes   = new byte[bom.length + content.length];
+        System.arraycopy(bom, 0, bytes, 0, bom.length);
+        System.arraycopy(content, 0, bytes, bom.length, content.length);
+        writeCsvBytes(bytes);
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
+        assertThat(result.size(), is(1));
+        assertThat(result.keySet().iterator().next().getScanId(), equalTo("1"));
+    }
+
+    @Test
+    public void invalidUtf8ManifestThrows() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("a.nii");
+        writeCsvBytes(("Scan ID,Modality,Series Description,Session Label,Subject ID,Start Date,Start Time,Subject Weight (g),Resource Name,Path\n" +
+                       "1,MR,Café,SES,SUBJ,01/02/2026,10:30 AM,25.5,NIFTI,a.nii\n").getBytes(StandardCharsets.ISO_8859_1));
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("Unable to read CSV manifest"));
+        thrown.expectCause(instanceOf(MalformedInputException.class));
+        service.extractResource(root, user, "PROJ");
     }
 
     @Test
@@ -519,7 +551,7 @@ public class CsvBasedResourceIdentifierServiceTest {
     }
 
     @Test
-    public void differingCustomScanValuesSplitResources() throws Exception {
+    public void differingCustomScanValuesThrow() throws Exception {
         when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(withCustomMapping("TR", "xnat:mrScanData/parameters/tr", false, null));
         touch("a.nii");
         touch("b.nii");
@@ -529,8 +561,98 @@ public class CsvBasedResourceIdentifierServiceTest {
                 "1,MR,T1,SES,SUBJ,3000,b.nii"
         );
 
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("inconsistent values in column \"TR\""));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void conflictingModalityForSameScanThrows() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("nifti/a.nii");
+        touch("dicom/a.dcm");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Resource Name,Path",
+                "1,MR,T1,SES,SUBJ,NIFTI,nifti",
+                "1,CT,Head,SES,SUBJ,DICOM,dicom"
+        );
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("CSV rows 1 and 2 have inconsistent values in column \"Modality\""));
+        thrown.expectMessage(containsString("subject \"SUBJ\" session \"SES\" scan \"1\""));
+        thrown.expectMessage(containsString("\"MR\" vs \"CT\""));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void conflictingSeriesDescriptionForSameScanThrows() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("nifti/a.nii");
+        touch("dicom/a.dcm");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Resource Name,Path",
+                "1,MR,T1,SES,SUBJ,NIFTI,nifti",
+                "1,MR,T2,SES,SUBJ,DICOM,dicom"
+        );
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("inconsistent values in column \"Series Description\""));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void sameScanIdInDifferentSessionsMayDiffer() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("a.nii");
+        touch("b.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Path",
+                "1,MR,T1,SES_A,SUBJ,a.nii",
+                "1,CT,Head,SES_B,SUBJ,b.nii"
+        );
+
         final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
         assertThat(result.size(), is(2));
+    }
+
+    @Test
+    public void resourcesOfSameScanShareMergedScanValues() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(withCustomMapping("TR", "xnat:mrScanData/parameters/tr", false, null));
+        touch("nifti/a.nii");
+        touch("dicom/a.dcm");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Start Date,TR,Resource Name,Path",
+                "1,MR,T1,SES,SUBJ,01/02/2026,,NIFTI,nifti",
+                "1,MR,T1,SES,SUBJ,,2500,DICOM,dicom"
+        );
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
+        assertThat(result.size(), is(2));
+        for (final ScanResource key : result.keySet()) {
+            assertThat(key.getModality(), equalTo("MR"));
+            assertThat(key.getSeriesDescription(), equalTo("T1"));
+            assertThat(key.getStartDate(), equalTo(LocalDate.of(2026, 1, 2)));
+            assertThat(key.getCustomProperties().get("xnat:mrScanData/parameters/tr"), equalTo("2500"));
+        }
+    }
+
+    @Test
+    public void blankScanValueDoesNotSplitResource() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("a.nii");
+        touch("b.nii");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Subject Weight (g),Resource Name,Path",
+                "1,MR,T1,SES,SUBJ,25.5,NIFTI,a.nii",
+                "1,MR,T1,SES,SUBJ,,NIFTI,b.nii"
+        );
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
+        assertThat(result.size(), is(1));
+        final ScanResource key = result.keySet().iterator().next();
+        assertThat(key.getSeriesDescription(), equalTo("T1"));
+        assertThat(key.getSubjectWeight(), equalTo(25.5));
+        assertThat(result.values().iterator().next(), hasSize(2));
     }
 
     @Test
@@ -732,7 +854,11 @@ public class CsvBasedResourceIdentifierServiceTest {
 
     private void writeCsv(final String... lines) throws IOException {
         final String content = String.join("\n", lines) + "\n";
-        Files.write(root.resolve("manifest.csv"), content.getBytes(StandardCharsets.UTF_8));
+        writeCsvBytes(content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void writeCsvBytes(final byte[] content) throws IOException {
+        Files.write(root.resolve("manifest.csv"), content);
     }
 
     private void touch(final String relative) throws IOException {

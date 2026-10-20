@@ -71,6 +71,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Invalid upload parameters no longer produce an **HTTP 500** with the generic servlet error page.
+  Examples include a missing `project` or `primary-modality`, an unconfigured modality, an unknown
+  project, insufficient permissions and an unknown `resourceIdentifier`. The import request now
+  returns **HTTP 400** with a message naming the missing or invalid parameter. This applies to
+  synchronous calls and to asynchronous ones (`http-session-listener`), so asynchronous calls no
+  longer return 200 "Submitted for …" for an import that can't run. The importer previously
+  validated parameters in its constructor, and XNAT builds importers reflectively, which wrapped
+  the error and discarded its status and message. Validation now runs in the importer's
+  `setIdentifier()` override, which XNAT calls directly during importer construction.
 - Any import failure now publishes a terminal failure status, so the activity tab stops polling and
   shows the error. This includes errors raised by the CSV manifest service, such as an archive with
   no CSV manifest, and JVM errors such as a `NoSuchMethodError` when the plugin runs on an
@@ -86,6 +95,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "No CSV manifest" or, with Customize labeling, was read as a directory layout and imported
   nothing. Only that one folder level is searched. Hidden files, the `__MACOSX` folder macOS adds
   to zips, and Windows' `Thumbs.db` and `desktop.ini` are ignored while looking.
+- CSV manifests that start with a UTF-8 byte-order mark now import. Excel's "CSV UTF-8" format
+  writes one. Previously the mark was read as part of the first column name, so the import failed
+  with a missing required column, such as `Scan ID`. Manifests that aren't valid UTF-8 are still
+  rejected, rather than imported with replacement characters.
+- An import now fails, naming both rows and the column, when CSV manifest rows for the same subject,
+  session, and scan disagree on the scan's modality, series description, start date or time, or a
+  custom scan property. Previously the rows were merged into one scan and the last row's values
+  silently replaced the others, including the modality and therefore the scan's data type. Rows
+  that agree, or leave a value blank, still add their resources to the same scan. The
+  directory-walking service likewise rejects a scan directory holding more than one modality
+  directory, and each scan is now created once rather than once per resource.
 
 ## [1.0.0] - 2026-07-31
 

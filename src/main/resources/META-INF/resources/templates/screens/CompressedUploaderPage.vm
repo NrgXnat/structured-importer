@@ -12,13 +12,28 @@
 <script type="text/javascript">
     XNAT.app = getObject(XNAT.app || {});
 
+    // Set once the user picks an importer handler, so the site default that
+    // arrives asynchronously from siteConfig does not overwrite their choice.
+    var importHandlerChosen = false;
+
     function getSiteConfig() {
         XNAT.xhr.getJSON({
             url: XNAT.url.rootUrl('/xapi/siteConfig'),
             success: function(siteConfig){
-                handler = siteConfig['uiDefaultCompressedUploaderImporter'];
-                document.getElementById('import-handler').value = handler;
-                hiddenItemsByHandler(handler);
+                if (importHandlerChosen) {
+                    return;
+                }
+                // Apply the site default only when it names one of the listed
+                // handlers; otherwise keep the current selection (DICOM Zip).
+                var select = document.getElementById('import-handler');
+                var handler = siteConfig['uiDefaultCompressedUploaderImporter'];
+                var listed = Array.prototype.some.call(select.options, function(option) {
+                    return option.value === handler;
+                });
+                if (listed) {
+                    select.value = handler;
+                }
+                hiddenItemsByHandler(select.value);
             }
         });
     }
@@ -439,7 +454,7 @@
             <tr>
                 <th align="left">Importer handler</th>
                 <td>
-                    <select id="import-handler" name="import-handler" onchange="hiddenItemsByHandler(this.value);">
+                    <select id="import-handler" name="import-handler" onchange="importHandlerChosen = true; hiddenItemsByHandler(this.value);">
                         <option value="DICOM-zip">DICOM Zip</option>
                         <option value="Structured-Zip">Structured Zip</option>
                         <option value="SI">Classic Session Importer (Deprecated)</option>

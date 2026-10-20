@@ -13,6 +13,7 @@ import org.nrg.xdat.base.BaseElement;
 import org.nrg.xdat.om.XnatExperimentdata;
 import org.nrg.xdat.om.XnatImagescandata;
 import org.nrg.xdat.om.XnatImagesessiondata;
+import org.nrg.xdat.om.XnatProjectdata;
 import org.nrg.xdat.om.XnatResourcecatalog;
 import org.nrg.xdat.om.XnatSubjectdata;
 import org.nrg.xdat.security.helpers.Permissions;
@@ -21,6 +22,7 @@ import org.nrg.xft.XFTItem;
 import org.nrg.xft.event.EventUtils;
 import org.nrg.xft.security.UserI;
 import org.nrg.xft.utils.SaveItemHelper;
+import org.nrg.xnat.DicomObjectIdentifier;
 import org.nrg.xnat.helpers.file.StoredFile;
 import org.nrg.xnat.helpers.uri.UriParserUtils;
 import org.nrg.xnat.restlet.actions.importer.ImporterHandler;
@@ -34,6 +36,7 @@ import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService.ScanResource;
 import org.restlet.data.Status;
+import org.springframework.beans.BeansException;
 
 import java.io.File;
 import java.io.IOException;
@@ -58,7 +61,6 @@ import static org.nrg.xft.event.XftItemEventI.CREATE;
 @Slf4j
 public class StructuredImporter extends ImporterHandlerA {
     public static final String IMPORTER_HANDLER          = "Structured-Zip";
-    public static final String PARAM_RESOURCE_IDENTIFIER = ResourceIdentifierSelector.PARAM_RESOURCE_IDENTIFIER;
     public static final String NO_FILES_IMPORTED_PREFIX  = "NoFilesImported:";
 
     private static final String EXTRACTED_FOLDER       = "extracted";
@@ -72,7 +74,7 @@ public class StructuredImporter extends ImporterHandlerA {
     private final UserI                     user;
     private final UserDataCache             userDataCache;
     private final CatalogService            catalogService;
-    private final ResourceIdentifierService resourceIdentifierService;
+    private final String                    resourceIdentifierServiceName;
     private final ModalityDataTypeService   modalityDataTypeService;
     private final FileWriterWrapperI        fileWriter;
     private final Map<String, Object>       parameters;
@@ -84,39 +86,69 @@ public class StructuredImporter extends ImporterHandlerA {
     private final String                    sessionLabel;
     private final String                    primaryModality;
 
-    private boolean terminalStatusPublished;
+    private ResourceIdentifierService resourceIdentifierService;
+    private boolean                   validated;
+    private boolean                   terminalStatusPublished;
 
+    /**
+     * Only captures the upload's state: validation happens in {@link #setIdentifier(DicomObjectIdentifier)}.
+     * Core builds importers reflectively, so anything thrown here reaches the caller wrapped in an
+     * InvocationTargetException, which core reports as a message-less HTTP 500.
+     */
     public StructuredImporter(final Object listenerControl, final UserI user,
                               final FileWriterWrapperI fileWriter,
-                              final Map<String, Object> parameters) throws ClientException {
+                              final Map<String, Object> parameters) {
         super(listenerControl, user);
 
-        this.user                      = user;
-        this.userDataCache             = XDAT.getContextService().getBean(UserDataCache.class);
-        this.catalogService            = XDAT.getContextService().getBean(CatalogService.class);
-        this.resourceIdentifierService = XDAT.getContextService().getBean(ResourceIdentifierSelector.select(parameters), ResourceIdentifierService.class);
-        this.modalityDataTypeService   = XDAT.getContextService().getBean(ModalityDataTypeService.class);
-        this.fileWriter                = fileWriter;
-        this.parameters                = parameters;
-        this.username                  = user.getUsername();
-        this.filename                  = fileWriter.getName();
-        this.workingDirectory          = determineWorkingDirectory();
-        this.projectId                 = (String) parameters.get(PARAM_PROJECT);
-        this.subjectLabel              = (String) parameters.get(PARAM_SUBJECT);
-        this.sessionLabel              = (String) parameters.get(PARAM_SESSION);
-        this.primaryModality           = (String) parameters.get(PARAM_PRIMARY_MODALITY);
+        this.user                          = user;
+        this.userDataCache                 = XDAT.getContextService().getBean(UserDataCache.class);
+        this.catalogService                = XDAT.getContextService().getBean(CatalogService.class);
+        this.resourceIdentifierServiceName = ResourceIdentifierSelector.select(parameters);
+        this.modalityDataTypeService       = XDAT.getContextService().getBean(ModalityDataTypeService.class);
+        this.fileWriter                    = fileWriter;
+        this.parameters                    = parameters;
+        this.username                      = user.getUsername();
+        this.filename                      = fileWriter.getName();
+        this.workingDirectory              = determineWorkingDirectory();
+        this.projectId                     = (String) parameters.get(PARAM_PROJECT);
+        this.subjectLabel                  = (String) parameters.get(PARAM_SUBJECT);
+        this.sessionLabel                  = (String) parameters.get(PARAM_SESSION);
+        this.primaryModality               = (String) parameters.get(PARAM_PRIMARY_MODALITY);
+    }
 
-        validateParameters();
-
-        final File file = this.workingDirectory.toFile();
-        //noinspection ResultOfMethodCallIgnored
-        file.mkdirs();
-        file.deleteOnExit();
+    /**
+     * Validates the upload parameters while the request is still being handled. Core's buildImporter calls
+     * this directly (not reflectively) right after construction, before the import is submitted to the
+     * executor for asynchronous uploads, and Importer.handlePost turns an IllegalArgumentException from
+     * buildImporter into HTTP 400 with the exception's message. Validating in {@link #call()} alone is too
+     * late for asynchronous uploads: core has already responded 200 "Submitted for archival" by then.
+     */
+    @Override
+    public ImporterHandlerA setIdentifier(final DicomObjectIdentifier<XnatProjectdata> identifier) {
+        super.setIdentifier(identifier);
+        try {
+            validateParameters();
+        } catch (ClientException e) {
+            log.warn("Rejected structured import of {}: {}", getFilename(), e.getMessage());
+            throw new IllegalArgumentException(e.getMessage(), e);
+        }
+        return this;
     }
 
     @Override
     public List<String> call() throws ClientException, ServerException {
+        //noinspection TryWithIdenticalCatches
         try {
+            // Normally already done by setIdentifier() when core built the importer
+            if (!validated) {
+                validateParameters();
+            }
+
+            final File workingDir = getWorkingDirectory().toFile();
+            //noinspection ResultOfMethodCallIgnored
+            workingDir.mkdirs();
+            workingDir.deleteOnExit();
+
             processing("Extracting file " + getFilename() + " for user " + getUsername() + " into folder " + getWorkingDirectory());
             try (final InputStream input = fileWriter.getInputStream()) {
                 ArchiveExtractor.extract(input, getFilename(), getWorkingDirectory());
@@ -132,8 +164,14 @@ public class StructuredImporter extends ImporterHandlerA {
             final Map<SessionContext, Map<ScanResource, List<Path>>> grouped = groupBySession(resources);
             processing("Grouped resources into " + grouped.size() + " session(s)");
 
-            final List<String> uris = new ArrayList<>();
+            // Group every session's resources by scan before saving anything, so a conflict leaves no partial import
+            final Map<SessionContext, Map<String, Map<ScanResource, List<Path>>>> scansBySession = new LinkedHashMap<>();
             for (final Map.Entry<SessionContext, Map<ScanResource, List<Path>>> entry : grouped.entrySet()) {
+                scansBySession.put(entry.getKey(), ScanGrouper.group(entry.getKey().getSessionLabel(), entry.getValue()));
+            }
+
+            final List<String> uris = new ArrayList<>();
+            for (final Map.Entry<SessionContext, Map<String, Map<ScanResource, List<Path>>>> entry : scansBySession.entrySet()) {
                 uris.add(createSession(entry.getKey(), entry.getValue()));
             }
             if (uris.isEmpty()) {
@@ -234,10 +272,11 @@ public class StructuredImporter extends ImporterHandlerA {
         return new SessionContext(subject, session);
     }
 
-    private String createSession(final SessionContext context, final Map<ScanResource, List<Path>> resources) throws ClientException, ServerException {
+    private String createSession(final SessionContext context, final Map<String, Map<ScanResource, List<Path>>> scans) throws ClientException, ServerException {
         final String               subjectLabel = context.getSubjectLabel();
         final String               sessionLabel = context.getSessionLabel();
-        final XnatSubjectdata      subject      = getOrCreateSubject(subjectLabel, resources.keySet());
+        final List<ScanResource>   resources    = scans.values().stream().flatMap(scan -> scan.keySet().stream()).collect(Collectors.toList());
+        final XnatSubjectdata      subject      = getOrCreateSubject(subjectLabel, resources);
         final XnatImagesessiondata session      = createNewSession();
 
         try {
@@ -247,16 +286,15 @@ public class StructuredImporter extends ImporterHandlerA {
             session.setLabel(sessionLabel);
             session.setModality(getPrimaryModality());
             CustomPropertyApplier.applyProperties(session, PropertyTargets.TargetType.SESSION,
-                                                  CustomPropertyApplier.collectProperties(resources.keySet(), PropertyTargets.TargetType.SESSION, getModalityDataTypes()),
+                                                  CustomPropertyApplier.collectProperties(resources, PropertyTargets.TargetType.SESSION, getModalityDataTypes()),
                                                   getModalityDataTypes());
 
             SaveItemHelper.authorizedSave(session, getUser(), false, false, EventUtils.newEventInstance(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_FORM, "Created session " + sessionLabel + " for subject " + subjectLabel + " in project " + getProjectId()));
 
-            for (final Map.Entry<ScanResource, List<Path>> entry : resources.entrySet()) {
-                final ScanResource resource = entry.getKey();
-                final List<Path>   sources  = entry.getValue();
-
-                final XnatImagescandata scan = createScanObject(resource.getModality());
+            for (final Map<ScanResource, List<Path>> scanResources : scans.values()) {
+                // ScanGrouper guarantees every resource of the scan carries the same scan-level values
+                final ScanResource      resource = scanResources.keySet().iterator().next();
+                final XnatImagescandata scan     = createScanObject(resource.getModality());
                 scan.setImageSessionId(session.getId());
                 scan.setId(resource.getScanId());
                 scan.setSeriesDescription(StringUtils.defaultIfBlank(resource.getSeriesDescription(), resource.getScanId()));
@@ -271,16 +309,9 @@ public class StructuredImporter extends ImporterHandlerA {
                 SaveItemHelper.authorizedSave(scan, getUser(), false, false, EventUtils.newEventInstance(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_FORM, "Created scan " + scan.getId() + " on session " + sessionLabel + " in project " + getProjectId()));
                 log.info("Created scan {} for session {}", scan.getId(), session.getId());
 
-                final XnatResourcecatalog catalog = createResourceCatalog(session.getId(), scan.getId(), resource.getName());
-                log.info("Created catalog for resource {} on session {} scan {} at {}", resource.getName(), session.getId(), scan.getId(), catalog.getUri());
-
-                final Path target = Paths.get(catalog.getUri()).getParent();
-                log.info("Moving {} source(s) for resource {} into {}", sources.size(), resource.getName(), target);
-                moveResourceFiles(sources, target);
-
-                final String resourceUri = "/archive/experiments/" + session.getId() + "/scans/" + scan.getId() + "/resources/" + resource.getName();
-                log.info("Refreshing catalog at {} via URI {}", catalog.getUri(), resourceUri);
-                catalogService.refreshResourceCatalog(getUser(), resourceUri, CatalogService.Operation.All);
+                for (final Map.Entry<ScanResource, List<Path>> entry : scanResources.entrySet()) {
+                    createResource(session.getId(), scan.getId(), entry.getKey().getName(), entry.getValue());
+                }
             }
         } catch (ClientException e) {
             throw e;
@@ -289,6 +320,19 @@ public class StructuredImporter extends ImporterHandlerA {
         }
 
         return UriParserUtils.getArchiveUri(session);
+    }
+
+    private void createResource(final String sessionId, final String scanId, final String name, final List<Path> sources) throws Exception {
+        final XnatResourcecatalog catalog = createResourceCatalog(sessionId, scanId, name);
+        log.info("Created catalog for resource {} on session {} scan {} at {}", name, sessionId, scanId, catalog.getUri());
+
+        final Path target = Paths.get(catalog.getUri()).getParent();
+        log.info("Moving {} source(s) for resource {} into {}", sources.size(), name, target);
+        moveResourceFiles(sources, target);
+
+        final String resourceUri = "/archive/experiments/" + sessionId + "/scans/" + scanId + "/resources/" + name;
+        log.info("Refreshing catalog at {} via URI {}", catalog.getUri(), resourceUri);
+        catalogService.refreshResourceCatalog(getUser(), resourceUri, CatalogService.Operation.All);
     }
 
     private void moveResourceFiles(final List<Path> sources, final Path target) throws IOException {
@@ -441,6 +485,16 @@ public class StructuredImporter extends ImporterHandlerA {
         }
         if (!Permissions.canEditProject(getUser(), projectId)) {
             throw new ClientException("User " + getUsername() + " cannot edit project " + projectId);
+        }
+        resourceIdentifierService = resolveResourceIdentifierService();
+        validated = true;
+    }
+
+    private ResourceIdentifierService resolveResourceIdentifierService() throws ClientException {
+        try {
+            return XDAT.getContextService().getBean(resourceIdentifierServiceName, ResourceIdentifierService.class);
+        } catch (BeansException e) {
+            throw new ClientException("Unknown resource identifier service: " + resourceIdentifierServiceName, e);
         }
     }
 
