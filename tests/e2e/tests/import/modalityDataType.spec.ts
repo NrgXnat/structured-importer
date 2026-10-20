@@ -55,6 +55,40 @@ test('a modality that is not in the configuration is refused', async () => {
     );
 });
 
+/** Imports a directory archive expected to be refused, and returns the response and any session it left. */
+async function importExpectingRefusal(name: string, scanModality: string, primaryModality: string) {
+    const session = uniqueLabel(`Refused${name}`);
+    const archive = await buildDirectoryArchive(`mod-${name}`, [
+        { scanId: '1', modality: scanModality, resourceName: 'DATA', files: { 'a.dat': 'a' } },
+    ]);
+    const res = await api.importArchiveRaw(archive, {
+        project: PROJECT,
+        subject: uniqueLabel(`Refused${name}Subj`),
+        session,
+        'primary-modality': primaryModality,
+        resourceIdentifier: RESOURCE_IDENTIFIER.SIMPLE,
+    });
+    const body = (await res.text())
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const leftBehind = (await api.listExperiments(PROJECT)).find(e => e.label === session);
+    if (leftBehind) created.push(leftBehind.ID);
+    return { res, body, leftBehind };
+}
+
+test('a scan directory with an unconfigured modality is refused and leaves no session behind', async () => {
+    const { res, body, leftBehind } = await importExpectingRefusal(
+        'ScanUnknown',
+        'NOT_A_REAL_MODALITY',
+        'MR',
+    );
+
+    expect(res.status(), `the archive should be refused as a client error: ${body.slice(0, 200)}`).toBe(400);
+    expect(body, 'the refusal must name the modality it did not recognize').toContain('NOT_A_REAL_MODALITY');
+    expect(leftBehind, 'a refused import must not leave an empty session in the project').toBeUndefined();
+});
+
 test('the modality configuration is ordered by group and is free of duplicate modalities', async () => {
     // The endpoint documents its ordering because the UI renders the drop-down
     // straight from it. A duplicate modality would make the drop-down
@@ -83,47 +117,69 @@ test('every advertised mapping names at least one data type, and names it plausi
     }
 });
 
-test('a modality offered for session creation cannot fail on its own scans', async () => {
-    // A modality with a session type but no scan type is offered in the
-    // uploader's primary-modality drop-down, because that list is filtered on
-    // hasSessionDataType alone. Picking it works right up until the archive
-    // contains a scan directory of the same modality, at which point the
-    // import fails with "has no scan data type configured".
-    //
-    // On the build this was written against, PETMR is exactly that: session
-    // xnat:petmrSessionData, no scan type. SC and MRS are the mirror image
-    // (scan type, no session type) and are correctly kept out of the
-    // drop-down, so they are not affected.
-    //
-    // The test derives the offending modalities from the live configuration
-    // rather than naming PETMR, so it keeps testing the real thing as the
-    // configuration changes, and starts passing on its own once the mapping
-    // is completed.
+test('a PETMR session holds its PET and MR scans as separate scans', async () => {
+    // PETMR is a session type with no scan type of its own: a PETMR session is
+    // made of PET scans and MR scans. So the archive carries PET and MR scan
+    // directories, and primary-modality PETMR decides the session type.
+    const petmr = modalities.find(m => m.modality === 'PETMR');
+    expect(petmr, 'PETMR is part of the default modality configuration').toBeDefined();
+    expect(petmr!.scan, 'PETMR is a session type only, with no scan type').toBeUndefined();
+    const pet = modalities.find(m => m.modality === 'PET')!;
+    const mr = modalities.find(m => m.modality === 'MR')!;
+
+    const archive = await buildDirectoryArchive('mod-petmr', [
+        { scanId: '1', modality: 'PET', resourceName: 'DATA', files: { 'pet.dat': 'pet' } },
+        { scanId: '2', modality: 'MR', resourceName: 'DATA', files: { 'mr.dat': 'mr' } },
+    ]);
+    const id = await api.importArchive(archive, {
+        project: PROJECT,
+        subject: uniqueLabel('PetmrSubj'),
+        session: uniqueLabel('PetmrSess'),
+        'primary-modality': 'PETMR',
+        resourceIdentifier: RESOURCE_IDENTIFIER.SIMPLE,
+    });
+    created.push(id);
+
+    expect(await api.getExperimentDataType(id)).toBe(petmr!.session);
+    const scans = await api.getScans(id);
+    expect(
+        scans.map(s => [s.ID, s.xsiType]).sort(),
+        'each scan keeps the data type of its own modality',
+    ).toEqual([
+        ['1', pet.scan],
+        ['2', mr.scan],
+    ]);
+});
+
+test('a scan directory labeled with a session-only modality is refused, says why, and leaves no session behind', async () => {
+    // A session-only modality such as PETMR names a kind of session, not a
+    // kind of scan, so a scan directory labeled with it cannot be imported.
+    // The importer should say so plainly and leave the project as it was.
+    // Derived from the live configuration so it covers every such modality.
     const sessionOnly = modalities.filter(m => m.session && !m.scan);
+    expect(
+        sessionOnly.length,
+        'the default configuration has at least one session-only modality',
+    ).toBeGreaterThan(0);
 
     for (const mapping of sessionOnly) {
-        const archive = await buildDirectoryArchive(`mod-selfscan-${mapping.modality}`, [
-            { scanId: '1', modality: mapping.modality, resourceName: 'DATA', files: { 'a.dat': 'a' } },
-        ]);
+        const { res, body, leftBehind } = await importExpectingRefusal(
+            `SessionOnly${mapping.modality}`,
+            mapping.modality,
+            mapping.modality,
+        );
 
-        const res = await api.importArchiveRaw(archive, {
-            project: PROJECT,
-            subject: uniqueLabel(`SelfScanSubj${mapping.modality}`),
-            session: uniqueLabel(`SelfScanSess${mapping.modality}`),
-            'primary-modality': mapping.modality,
-            resourceIdentifier: RESOURCE_IDENTIFIER.SIMPLE,
-        });
-
-        const body = await res.text();
-        if (res.ok()) {
-            const id = body.trim().split('/').filter(Boolean).pop();
-            if (id) created.push(id);
-        }
-
-        expect(
-            res.ok(),
-            `modality ${mapping.modality} is offered for session creation but has no scan data type, ` +
-                `so an archive containing a ${mapping.modality} scan directory cannot be imported: ${body}`,
-        ).toBeTruthy();
+        expect
+            .soft(
+                res.status(),
+                `${mapping.modality}: should be refused as a client error: ${body.slice(0, 200)}`,
+            )
+            .toBe(400);
+        expect
+            .soft(body, `${mapping.modality}: the refusal must say the modality has no scan type`)
+            .toMatch(new RegExp(`${mapping.modality}.*no scan data type`, 'i'));
+        expect
+            .soft(leftBehind, `${mapping.modality}: a refused import must not leave an empty session`)
+            .toBeUndefined();
     }
 });

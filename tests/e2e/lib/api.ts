@@ -294,10 +294,18 @@ export class StructuredImporterApi {
         return (await res.json()).ResultSet.Result;
     }
 
-    /** Sessions in a project, as {ID, label} rows. */
+    /**
+     * Sessions in a project, as {ID, label} rows.
+     *
+     * Uses /data/experiments?project= rather than /data/projects/{id}/experiments,
+     * because the project listing returns only session types registered as
+     * searchable, and silently omits the rest (ultrasound, DX, XC and most of
+     * the importer's modalities). A "nothing was created" check built on it
+     * would pass for those types whatever the importer did.
+     */
     async listExperiments(projectId: string): Promise<Array<{ ID: string; label: string }>> {
         const res = await this.request.get(
-            `/data/projects/${encodeURIComponent(projectId)}/experiments?format=json`,
+            `/data/experiments?format=json&project=${encodeURIComponent(projectId)}`,
         );
         expect(res.ok(), `GET experiments for ${projectId} failed: HTTP ${res.status()}`).toBeTruthy();
         return (await res.json()).ResultSet.Result;
