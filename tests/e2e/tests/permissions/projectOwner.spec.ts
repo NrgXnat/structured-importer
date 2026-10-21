@@ -19,6 +19,7 @@ import { test, expect } from '../../lib/fixtures';
 import { StructuredImporterApi, RESOURCE_IDENTIFIER } from '../../lib/api';
 import { buildDirectoryArchive, cleanupArchives } from '../../lib/archive';
 import { XNAT_URL, NON_ADMIN_USER, uniqueLabel } from '../../lib/env';
+import { hasConfigApi, pluginVersion } from '../../lib/capabilities';
 
 test.skip(
     NON_ADMIN_USER === '',
@@ -97,4 +98,12 @@ test('a project owner cannot import into a project they do not belong to', async
         await admin.listExperiments(FOREIGN),
         'the refused import must leave the other project empty',
     ).toHaveLength(0);
+});
+
+test("a project owner can download their project's manifest template", async () => {
+    test.skip(!hasConfigApi(), `configuration API absent on ${pluginVersion()}`);
+    const res = await user.getProjectCsvTemplateRaw(OWNED);
+    expect(res.ok(), `HTTP ${res.status()}`).toBeTruthy();
+    expect(res.headers()['content-type']).toMatch(/^text\/csv/);
+    expect((await res.text()).trim().length, 'the template has a header row').toBeGreaterThan(0);
 });

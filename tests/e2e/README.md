@@ -100,10 +100,12 @@ collection time.
 | `validation/manifestAndLabeling.spec.ts` | 6 | Manifest refusals and custom labeling precedence |
 | `ui/uploaderPage.spec.ts` | 7 | The form's controls and the modality drop-down |
 | `ui/uploadThroughTheBrowser.spec.ts` | 4 | Directory and manifest archives uploaded through the real page |
-| `permissions/configApiAccess.spec.ts` | 5 | Configuration API gating and importing into an inaccessible project |
-| `permissions/projectOwner.spec.ts` | 2 | A project owner can import into their own project and not into another |
+| `permissions/configApiAccess.spec.ts` | 7 | Configuration API gating and importing into an inaccessible project |
+| `permissions/projectOwner.spec.ts` | 3 | A project owner can import into their own project and not into another |
 | `validation/manifestFormat.spec.ts` | 6 | Manifest file formats: byte order mark, empty manifest, two CSVs, bad path, label rules |
 | `import/manifestFormatTolerance.spec.ts` | 4 | Quoted commas, Windows line endings, any `.csv` name, non-numeric scan IDs |
+| `import/manifestInFolder.spec.ts` | 7 | A manifest inside a single top-level folder (a zipped folder): found, paths relative to it, zip clutter ignored, no deeper search, a data CSV in a one-scan layout left alone |
+| `api/csvTemplate.spec.ts` | 7 | The blank manifest template for the site and for a project: columns and order, project or site fallback, quoting, and a filled-in template importing |
 
 ### Deliberately not covered
 

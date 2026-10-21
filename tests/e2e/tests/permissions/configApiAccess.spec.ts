@@ -126,3 +126,15 @@ test('a non-admin cannot import into a project they have no access to', async ()
         'a refused import must leave the project empty',
     ).toHaveLength(0);
 });
+
+test('a non-admin cannot download the site manifest template', async () => {
+    test.skip(!hasConfigApi(), `configuration API absent on ${pluginVersion()}`);
+    expect((await user.getSiteCsvTemplateRaw()).status()).toBe(403);
+});
+
+test('a non-admin cannot download the manifest template of a project they cannot see', async () => {
+    test.skip(!hasConfigApi(), `configuration API absent on ${pluginVersion()}`);
+    const res = await user.getProjectCsvTemplateRaw(PRIVATE_PROJECT);
+    expect(res.ok(), `answered ${res.status()}`).toBeFalsy();
+    expect([403, 404], 'refused, not served').toContain(res.status());
+});

@@ -216,6 +216,20 @@ export class StructuredImporterApi {
         }
     }
 
+    // ------------------------------------------------- CSV manifest templates
+
+    /** The blank CSV manifest built from the site-wide column mappings. */
+    async getSiteCsvTemplateRaw(): Promise<APIResponse> {
+        return this.request.get('/xapi/structured-importer/csv-column-mappings/template');
+    }
+
+    /** The blank CSV manifest for imports into a project: its own mappings, or the site's. */
+    async getProjectCsvTemplateRaw(projectId: string): Promise<APIResponse> {
+        return this.request.get(
+            `/xapi/structured-importer/projects/${encodeURIComponent(projectId)}/csv-column-mappings/template`,
+        );
+    }
+
     // --------------------------------------------- property display mappings
 
     async getPropertyDisplayMappingsRaw(): Promise<APIResponse> {
