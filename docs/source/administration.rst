@@ -83,6 +83,55 @@ button temporarily turns off a project's mappings (they can be restored by savin
 the **Delete** button removes them. In both cases imports into the project fall back to the
 site-wide configuration.
 
+Device Mappings
+---------------
+
+The **Device Mappings** tab (at both the site and project level) lists the acquisition devices
+uploads can name. Each device has a **mapping CSV** with one row per manifest column, saying which
+device parameter the value comes from and which XNAT property it fills. When an upload names a
+device, its CSV manifest is read with the device's mapping **instead of** the CSV column mappings.
+
+The mapping CSV's headers are matched by name, ignoring case and order:
+
+* **Source Parameter** (required) — the parameter in the device's files. ``(constant)``,
+  ``(user input)`` and ``(to confirm)`` mark values that don't come from the files.
+* **XNAT Column** (required) — the manifest column header.
+* **XNAT Property** (required, may be empty) — the XNAT property the column fills, as in the CSV
+  column mappings. Exactly one row must leave it empty: that row is the manifest's path column.
+* **Required** — ``yes`` or ``no`` (default ``no``; the path column is always required).
+* **Validation** — an optional regular expression each non-blank value must match.
+* **Source Section**, **Transform**, **Notes** — documentation only; not applied on import.
+
+Rows whose property the importer can't set (for example ``xnat:resourceCatalog/format``) are
+listed as warnings and ignored on import, so manifests may still carry those columns. A device
+can't be saved while its CSV has problems: a missing required header, a blank XNAT Column, a
+malformed property, a column mapped to two properties, a property filled from two columns, or
+other than one path column. ``xnat:imageScanData/startTime`` is read as the built-in scan start
+time.
+
+Site administrators add, edit and delete site devices; site devices are available to every
+project. The devices bundled with the plugin are stored as the site devices the first time XNAT
+starts with this version of the plugin. If the deprecated Device Mapping plugin replaced a bundled
+device's CSV, the replacement is used. In project settings, **Customize** copies a site device into
+the project; the copy replaces the site device for imports into that project, and deleting it
+makes the site device apply again. Projects can also add devices of their own. Saving a project
+device requires project edit access; deleting one requires project owner access.
+
+Each device row has **View** (the parsed mapping, with problems and warnings), **Edit** or
+**Customize**, **CSV** (download the mapping CSV), **Template** (a blank manifest with the
+device's columns) and **Delete** actions. The devices are stored through the same configuration
+service as the CSV column mappings and are available from the XAPI:
+
+* ``GET /xapi/structured-importer/device-mappings`` and
+  ``GET|PUT|DELETE /xapi/structured-importer/device-mappings/{deviceId}`` (site, administrators only)
+* ``GET /xapi/structured-importer/projects/{projectId}/device-mappings`` (the devices available to
+  the project) and ``GET|PUT|DELETE /xapi/structured-importer/projects/{projectId}/device-mappings/{deviceId}``
+* ``.../{deviceId}/csv`` and ``.../{deviceId}/template`` downloads at both levels.
+
+``PUT`` takes the device as JSON (``id``, ``name``, ``manufacturer``, ``model``, ``category``,
+``modality``, ``xsiType``, ``metadataSource``, ``nativeFormats``, ``status`` — ``verified`` or
+``draft`` — ``notes`` and ``csv``) and returns HTTP 400 listing the problems when it is invalid.
+
 Modality Data Types
 -------------------
 

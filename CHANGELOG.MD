@@ -59,6 +59,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GET /xapi/structured-importer/csv-column-mappings/template` and
   `GET /xapi/structured-importer/projects/{projectId}/csv-column-mappings/template`.
 
+- **Device mappings**, merged from the Device Mapping plugin, which this replaces. A new
+  **Device Mappings** tab in the site and project settings lists acquisition devices, each with
+  a mapping CSV saying which manifest columns hold the device's metadata and which XNAT
+  properties they fill. Site administrators add, edit and delete site devices; projects can add
+  their own or customize a site device, and the project copy replaces it for imports into that
+  project. The compressed uploader has a **Device** drop-down for the Structured Zip importer,
+  and `POST /data/services/import` takes a `device` parameter. When an upload names a device,
+  its CSV manifest is read with the device's mapping instead of the CSV column mappings. The six
+  devices bundled with the Device Mapping plugin are stored as the site devices on first start,
+  keeping any CSV a site admin replaced in that plugin. The Siemens Inveon's modality is now
+  `PET`, the code the importer configures, rather than `PT`. Devices are served by new XAPI
+  endpoints under `/xapi/structured-importer/device-mappings` and
+  `/xapi/structured-importer/projects/{projectId}/device-mappings`.
+
 ### Changed
 
 - **Behavior change:** when a custom subject or session label is supplied with the upload *and*
@@ -76,6 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A CSV manifest row whose path is a folder with no files (as when a folder is zipped without its
+  contents) now fails the import naming the row, instead of creating an empty resource.
 - Invalid upload parameters no longer produce an **HTTP 500** with the generic servlet error page.
   Examples include a missing `project` or `primary-modality`, an unconfigured modality, an unknown
   project, insufficient permissions and an unknown `resourceIdentifier`. The import request now

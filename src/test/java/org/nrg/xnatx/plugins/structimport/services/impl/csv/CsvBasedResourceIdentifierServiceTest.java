@@ -9,6 +9,7 @@ import org.nrg.xft.security.UserI;
 import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
 import org.nrg.xnatx.plugins.structimport.models.ModalityMapping;
 import org.nrg.xnatx.plugins.structimport.services.CsvImportConfigService;
+import org.nrg.xnatx.plugins.structimport.services.DeviceMappingService;
 import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService.ScanResource;
 
@@ -50,6 +51,7 @@ public class CsvBasedResourceIdentifierServiceTest {
     public ExpectedException thrown = ExpectedException.none();
 
     private CsvImportConfigService            configService;
+    private DeviceMappingService              deviceService;
     private ModalityDataTypeService           modalityService;
     private CsvBasedResourceIdentifierService service;
     private UserI                               user;
@@ -58,6 +60,7 @@ public class CsvBasedResourceIdentifierServiceTest {
     @Before
     public void setUp() throws IOException {
         configService   = mock(CsvImportConfigService.class);
+        deviceService   = mock(DeviceMappingService.class);
         modalityService = mock(ModalityDataTypeService.class);
         // by default every modality resolves to a scan-capable mapping; individual
         // tests override specific modalities to exercise validation failures
@@ -69,7 +72,7 @@ public class CsvBasedResourceIdentifierServiceTest {
         modalityMap.put("CT", ModalityMapping.builder().modality("CT").scan("xnat:ctScanData").session("xnat:ctSessionData").build());
         modalityMap.put("SR", ModalityMapping.builder().modality("SR").scan("xnat:srScanData").build());
         when(modalityService.getModalityMappings()).thenReturn(modalityMap);
-        service = new CsvBasedResourceIdentifierService(configService, modalityService);
+        service = new CsvBasedResourceIdentifierService(configService, deviceService, modalityService);
         user    = mock(UserI.class);
         root    = Files.createTempDirectory("csv-based-import-test");
     }
@@ -118,6 +121,40 @@ public class CsvBasedResourceIdentifierServiceTest {
         assertThat(second.getKey().getScanId(), equalTo("2"));
         assertThat(second.getKey().getName(), equalTo("NIFTI"));
         assertThat(second.getValue(), hasSize(1));
+    }
+
+    @Test
+    public void readsManifestWithDeviceColumnMappingsWhenDeviceNamed() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        when(deviceService.getColumnMappings("PROJ", "skyscan")).thenReturn(Arrays.asList(
+                CsvColumnMapping.builder().column("Scan").property(CsvImportConfigService.PROP_SCAN_ID).build(),
+                CsvColumnMapping.builder().column("Modality").property(CsvImportConfigService.PROP_MODALITY).build(),
+                CsvColumnMapping.builder().column("Session Label").property(CsvImportConfigService.PROP_SESSION_LABEL).build(),
+                CsvColumnMapping.builder().column("Subject ID").property(CsvImportConfigService.PROP_SUBJECT_ID).build(),
+                CsvColumnMapping.builder().column("kVp").property("xnat:ctScanData/parameters/kvp").required(false).build(),
+                CsvColumnMapping.builder().column("Path").property("").build()));
+        touch("recon/slice1.tif");
+        writeCsv("Scan,Modality,Session Label,Subject ID,kVp,Path",
+                 "1,CT,SES_A,SUBJ_A,60,recon/slice1.tif");
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ", "skyscan");
+
+        assertThat(result.size(), is(1));
+        final ScanResource resource = result.keySet().iterator().next();
+        assertThat(resource.getScanId(), equalTo("1"));
+        assertThat(resource.getModality(), equalTo("CT"));
+        assertThat(resource.getCustomProperties().get("xnat:ctScanData/parameters/kvp"), equalTo("60"));
+    }
+
+    @Test
+    public void deviceThatCantBeUsedFailsTheImport() throws Exception {
+        when(deviceService.getColumnMappings("PROJ", "missing")).thenThrow(new IllegalStateException("No device with the ID \"missing\" is available to project PROJ"));
+        touch("a.nii");
+        writeCsv("Path", "a.nii");
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("missing"));
+        service.extractResource(root, user, "PROJ", "missing");
     }
 
     @Test
@@ -290,6 +327,36 @@ public class CsvBasedResourceIdentifierServiceTest {
 
         thrown.expect(IllegalStateException.class);
         thrown.expectMessage(containsString("does not exist"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void emptyPathFolderThrows() throws Exception {
+        // what's left when a folder is zipped without its contents
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        Files.createDirectories(root.resolve("1"));
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Path",
+                "1,MR,T1,SES,SUBJ,1"
+        );
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("CSV row 1 path \"1\" is a folder with no files in the archive"));
+        service.extractResource(root, user, "PROJ");
+    }
+
+    @Test
+    public void pathFolderHoldingOnlyArchiveClutterThrows() throws Exception {
+        when(configService.getColumnMappings(any(UserI.class), anyString())).thenReturn(defaultMappings());
+        touch("1/.DS_Store");
+        touch("1/sub/Thumbs.db");
+        writeCsv(
+                "Scan ID,Modality,Series Description,Session Label,Subject ID,Path",
+                "1,MR,T1,SES,SUBJ,1"
+        );
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("is a folder with no files"));
         service.extractResource(root, user, "PROJ");
     }
 

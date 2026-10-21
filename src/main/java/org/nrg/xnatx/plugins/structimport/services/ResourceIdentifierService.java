@@ -23,6 +23,22 @@ public interface ResourceIdentifierService {
     Map<ScanResource, List<Path>> extractResource(final Path extractedArchive, final UserI user, final String projectId);
 
     /**
+     * Identifies the scan resources within an extracted archive whose upload named an acquisition
+     * device. Implementations that read a CSV manifest read it with the device's column mappings
+     * instead of the project or site-wide ones. The default ignores the device, which suits services
+     * that don't read a manifest.
+     *
+     * @param extractedArchive the root of the extracted archive
+     * @param user             the user performing the import
+     * @param projectId        the project the import targets
+     * @param deviceId         the ID of the device that produced the data, or {@code null} when the upload names none
+     * @return a map of each identified resource to the source paths that make it up
+     */
+    default Map<ScanResource, List<Path>> extractResource(final Path extractedArchive, final UserI user, final String projectId, final String deviceId) {
+        return extractResource(extractedArchive, user, projectId);
+    }
+
+    /**
      * Identifies one resource and its destination context within an XNAT archive.
      * <p>
      * All fields other than {@code scanId}, {@code modality}, and {@code name}

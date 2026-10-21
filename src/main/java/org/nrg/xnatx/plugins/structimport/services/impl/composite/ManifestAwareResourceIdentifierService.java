@@ -1,6 +1,7 @@
 package org.nrg.xnatx.plugins.structimport.services.impl.composite;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.nrg.xft.security.UserI;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService;
 import org.nrg.xnatx.plugins.structimport.services.impl.csv.CsvBasedResourceIdentifierService;
@@ -38,9 +39,21 @@ public class ManifestAwareResourceIdentifierService implements ResourceIdentifie
 
     @Override
     public Map<ScanResource, List<Path>> extractResource(final Path extractedArchive, final UserI user, final String projectId) {
+        return extractResource(extractedArchive, user, projectId, null);
+    }
+
+    /**
+     * A device's mapping only applies to a CSV manifest, so when the upload names a device the archive
+     * must contain one: falling back to the directory layout would silently ignore the device.
+     */
+    @Override
+    public Map<ScanResource, List<Path>> extractResource(final Path extractedArchive, final UserI user, final String projectId, final String deviceId) {
         if (CsvBasedResourceIdentifierService.findManifestDirectory(extractedArchive).isPresent()) {
             log.info("Found a CSV manifest under {}; using the CSV resource identifier service", extractedArchive);
-            return csvService.extractResource(extractedArchive, user, projectId);
+            return csvService.extractResource(extractedArchive, user, projectId, deviceId);
+        }
+        if (StringUtils.isNotBlank(deviceId)) {
+            throw new IllegalStateException("The upload names the device \"" + deviceId + "\", but no CSV manifest (*.csv) was found at the root of the archive or of its single top-level folder. A device's mapping is applied to the manifest.");
         }
         log.info("No CSV manifest at {}; using the directory-walking resource identifier service", extractedArchive);
         return simpleService.extractResource(extractedArchive, user, projectId);

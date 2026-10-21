@@ -9,6 +9,7 @@
 #* @vtlvariable name="uploadID" type="java.lang.String" *#
 <link rel="stylesheet" type="text/css" href="$content.getURI('scripts/lib/jquery-plugins/chosen/chosen.min.css')">
 <script type="text/javascript" src="$content.getURI('scripts/lib/jquery-plugins/chosen/chosen.jquery.min.js')"></script>
+<script type="text/javascript" src="$content.getURI('scripts/xnat/plugin/structured-importer/deviceMappings.js')"></script>
 <script type="text/javascript">
     XNAT.app = getObject(XNAT.app || {});
 
@@ -50,6 +51,7 @@
                 document.getElementById("structured-session-labeling").hidden = true;
                 document.getElementById("structured-labeling-note").hidden = true;
                 document.getElementById("structured-primary-modality").hidden = true;
+                document.getElementById("structured-device").hidden = true;
                 unlockDestination();
                 break;
             case "Structured-Zip":
@@ -62,7 +64,9 @@
                 document.getElementById("structured-session-labeling").hidden = false;
                 document.getElementById("structured-labeling-note").hidden = false;
                 document.getElementById("structured-primary-modality").hidden = false;
+                document.getElementById("structured-device").hidden = false;
                 lockDestinationToArchive();
+                loadStructuredDevices();
                 break;
             default:
                 document.getElementById("ignoreUnparsableTr").hidden = true;
@@ -74,6 +78,7 @@
                 document.getElementById("structured-session-labeling").hidden = true;
                 document.getElementById("structured-labeling-note").hidden = true;
                 document.getElementById("structured-primary-modality").hidden = true;
+                document.getElementById("structured-device").hidden = true;
                 unlockDestination();
         }
         updateBeginUploadState();
@@ -146,6 +151,121 @@
             disable_search_threshold: 0
         });
     });
+
+    // The devices available to the selected project. Naming a device makes the
+    // importer read the CSV manifest with the device's mapping instead of the
+    // project's CSV column mappings.
+    var structuredDevices = [];
+    var structuredDevicesProject = null;
+
+    function loadStructuredDevices() {
+        var select  = document.getElementById('structured-device-select');
+        var project = $('#project').val();
+        if (!select || document.getElementById('import-handler').value !== 'Structured-Zip') {
+            return;
+        }
+        if (!project) {
+            structuredDevices = [];
+            structuredDevicesProject = null;
+            renderStructuredDevices('Select a $displayManager.getSingularDisplayNameForProject().toLowerCase() first');
+            return;
+        }
+        if (project === structuredDevicesProject) {
+            return;
+        }
+        structuredDevicesProject = project;
+        renderStructuredDevices('Loading devices…');
+        XNAT.xhr.getJSON({
+            url: XNAT.url.rootUrl('/xapi/structured-importer/projects/' + encodeURIComponent(project) + '/device-mappings'),
+            success: function(data) {
+                if (project !== structuredDevicesProject) {
+                    return;
+                }
+                structuredDevices = Array.isArray(data) ? data : [];
+                renderStructuredDevices();
+            },
+            fail: function(error) {
+                if (project !== structuredDevicesProject) {
+                    return;
+                }
+                console.error('Unable to load the devices for ' + project, error);
+                structuredDevices = [];
+                renderStructuredDevices();
+            }
+        });
+    }
+
+    // placeholder: a disabled single option, e.g. while loading
+    function renderStructuredDevices(placeholder) {
+        var select = document.getElementById('structured-device-select');
+        var previous = select.value;
+        select.innerHTML = '';
+        if (placeholder) {
+            select.appendChild(new Option(placeholder, ''));
+            select.disabled = true;
+        } else {
+            select.appendChild(new Option('None (use the CSV column mappings)', ''));
+            structuredDevices.forEach(function(device) {
+                var label = (device.manufacturer ? device.manufacturer + ' ' : '') + (device.name || device.id) +
+                            (device.status === 'draft' ? ' (draft)' : '');
+                select.appendChild(new Option(label, device.id));
+            });
+            select.disabled = false;
+            select.value = structuredDevices.some(function(device) { return device.id === previous; }) ? previous : '';
+        }
+        showStructuredDevice();
+    }
+
+    function selectedStructuredDevice() {
+        var id = document.getElementById('structured-device-select').value;
+        return structuredDevices.filter(function(device) { return device.id === id; })[0] || null;
+    }
+
+    function showStructuredDevice() {
+        var info   = document.getElementById('structured-device-info');
+        var device = selectedStructuredDevice();
+        info.innerHTML = '';
+        if (!device) {
+            info.hidden = true;
+            return;
+        }
+        info.hidden = false;
+        var text = [];
+        if (device.notes) {
+            text.push(device.notes);
+        }
+        if (device.status === 'draft') {
+            text.push("This device's mapping is a draft: its field names have not been checked against a real file from the device.");
+        }
+        text.push("The archive's CSV manifest is read with this device's columns.");
+        // device details are entered by administrators, so they're inserted as text, never as markup
+        var description = document.createElement('div');
+        description.textContent = text.join(' ');
+        info.appendChild(description);
+        var template = document.createElement('a');
+        template.href = '#';
+        template.innerHTML = '<i class="fa fa-download"></i> ';
+        template.appendChild(document.createTextNode('Download a manifest template for this device'));
+        template.addEventListener('click', function(e) {
+            e.preventDefault();
+            XNAT.plugin.structuredImporter.devices.download(
+                XNAT.plugin.structuredImporter.devices.projectUrl($('#project').val(), device.id) + '/template',
+                'struct-import-template-' + device.id + '.csv');
+        });
+        info.appendChild(template);
+    }
+
+    // Preselect the device's modality as the primary modality when it's one of the listed ones
+    $(document).on('change', '#structured-device-select', function() {
+        showStructuredDevice();
+        var device = selectedStructuredDevice();
+        var modality = $('#primary-modality');
+        if (device && device.modality && modality.find('option').filter(function() { return this.value === device.modality; }).length) {
+            modality.val(device.modality).trigger('chosen:updated');
+        }
+    });
+
+    $(document).on('change', '#project', loadStructuredDevices);
 
     function disableForm(theform) {
         if (document.getElementById) {
@@ -243,6 +363,21 @@
         })
     });
 
+    $(document).on('click','.info-structured-device',function(){
+        XNAT.dialog.open({
+            "title": "Acquisition Device",
+            "width": 450,
+            "content": "Choose the instrument that produced the data to read the archive's CSV manifest with that device's mapping: its manifest columns and the XNAT properties they fill. With <b>None</b>, the manifest is read with the $displayManager.getSingularDisplayNameForProject().toLowerCase()'s CSV column mappings (or the site-wide ones). Devices are managed under the Structured Importer settings. A device can only be used with a CSV manifest.",
+            "buttons": [
+                {
+                    "label": "OK",
+                    "isDefault": true,
+                    "close": true
+                }
+            ]
+        })
+    });
+
     $(document).on('blur','input.invalid',function(){
         if ($(this).val().length) $(this).removeClass('invalid');
     });
@@ -317,6 +452,9 @@
         if (handler == "SI") {
             formDataArchive.delete("subject");
             formDataArchive.delete("session");
+        }
+        if (handler !== "Structured-Zip" || !formDataArchive.get("device")) {
+            formDataArchive.delete("device");
         }
         if (ignoreUnparsable.checked) {
             formDataArchive.append("Ignore-Unparsable", "true");
@@ -501,6 +639,15 @@
                     </select>
                 </td>
             </tr>
+            <tr id="structured-device">
+                <th align="left">Device <i class="fa fa-question-circle info-structured-device" style="color: #084fab; cursor: pointer"></i></th>
+                <td>
+                    <select id="structured-device-select" name="device" disabled>
+                        <option value="">None (use the CSV column mappings)</option>
+                    </select>
+                    <div id="structured-device-info" class="description" style="max-width: 520px; font-size: 11px; color: #666; margin-top: 4px;" hidden></div>
+                </td>
+            </tr>
             <tr id="custom-labeling">
                 <th align="left">Custom Labeling <i class="fa fa-question-circle info-labeling-options" style="color: #084fab; cursor: pointer"></i></th>
                 <td>
@@ -631,6 +778,7 @@
 
     window.projectLoader.onLoadComplete.subscribe(function () {
         renderProjects(document.getElementById("project"), window.projectLoader.list, window.defaultProject);
+        loadStructuredDevices();
     });
 
     document.getElementById("project").onchange = function (o) {

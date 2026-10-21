@@ -1,0 +1,107 @@
+[
+  {
+    "id": "bruker-skyscan-1172",
+    "name": "SkyScan 1172",
+    "category": "Micro-CT",
+    "manufacturer": "Bruker",
+    "model": "SkyScan 1172",
+    "modality": "CT",
+    "xsiType": "xnat:ctScanData",
+    "metadataSource": "NRecon reconstruction log (<prefix>_rec.log)",
+    "nativeFormats": [
+      "TIFF projections",
+      "BMP/TIFF slices",
+      "LOG"
+    ],
+    "mappingFile": "bruker-skyscan-nrecon.csv",
+    "status": "verified",
+    "notes": "Mapping checked against a real SkyScan 1172 rec.log."
+  },
+  {
+    "id": "bruker-skyscan-1276",
+    "name": "SkyScan 1276",
+    "category": "Micro-CT",
+    "manufacturer": "Bruker",
+    "model": "SkyScan 1276",
+    "modality": "CT",
+    "xsiType": "xnat:ctScanData",
+    "metadataSource": "NRecon reconstruction log (<prefix>_rec.log)",
+    "nativeFormats": [
+      "TIFF projections",
+      "BMP/TIFF slices",
+      "LOG"
+    ],
+    "mappingFile": "bruker-skyscan-nrecon.csv",
+    "status": "verified",
+    "notes": "Shares the NRecon log format with the SkyScan 1172."
+  },
+  {
+    "id": "bruker-biospec",
+    "name": "BioSpec (ParaVision)",
+    "category": "MRI",
+    "manufacturer": "Bruker",
+    "model": "BioSpec",
+    "modality": "MR",
+    "xsiType": "xnat:mrScanData",
+    "metadataSource": "ParaVision visu_pars and method files",
+    "nativeFormats": [
+      "2dseq",
+      "fid/ser",
+      "DICOM export"
+    ],
+    "mappingFile": "bruker-paravision-mri.csv",
+    "status": "draft",
+    "notes": "Parameter names follow ParaVision 6 and 360; check them against your version."
+  },
+  {
+    "id": "siemens-inveon",
+    "name": "Inveon PET/CT",
+    "category": "PET / SPECT",
+    "manufacturer": "Siemens",
+    "model": "Inveon",
+    "modality": "PET",
+    "xsiType": "xnat:petScanData",
+    "metadataSource": "Inveon image header (.img.hdr)",
+    "nativeFormats": [
+      ".img + .img.hdr",
+      "List-mode .lst",
+      "DICOM export"
+    ],
+    "mappingFile": "siemens-inveon-pet.csv",
+    "status": "draft",
+    "notes": "Check header keys and the petScanData parameter paths on your XNAT."
+  },
+  {
+    "id": "revvity-ivis-spectrum",
+    "name": "IVIS Spectrum",
+    "category": "Optical",
+    "manufacturer": "Revvity",
+    "model": "IVIS Spectrum",
+    "modality": "OT",
+    "xsiType": "xnat:otherDicomScanData",
+    "metadataSource": "Living Image ClickInfo.txt",
+    "nativeFormats": [
+      "TIFF image set",
+      "ClickInfo.txt"
+    ],
+    "mappingFile": "revvity-ivis-spectrum.csv",
+    "status": "draft",
+    "notes": "ClickInfo key names vary by Living Image version."
+  },
+  {
+    "id": "emit-xerra",
+    "name": "Xerra",
+    "category": "Cryo-fluorescence tomography",
+    "manufacturer": "EMIT Imaging",
+    "model": "Xerra",
+    "modality": "CFT",
+    "xsiType": "xnat:otherDicomScanData",
+    "metadataSource": "Xerra Controller and Xerra Recon output",
+    "nativeFormats": [
+      "Not publicly documented"
+    ],
+    "mappingFile": "emit-xerra-cft.csv",
+    "status": "draft",
+    "notes": "Placeholder until a real Xerra export is available."
+  }
+]

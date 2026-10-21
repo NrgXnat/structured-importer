@@ -12,6 +12,7 @@ import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
 import org.nrg.xnatx.plugins.structimport.models.ModalityMapping;
 import org.nrg.xnatx.plugins.structimport.models.PropertyTargets;
 import org.nrg.xnatx.plugins.structimport.services.CsvImportConfigService;
+import org.nrg.xnatx.plugins.structimport.services.DeviceMappingService;
 import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +46,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Identifies scan resources from a CSV manifest at the root of the extracted
@@ -79,18 +81,36 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
             DateTimeFormatter.ISO_LOCAL_TIME);
 
     private final CsvImportConfigService  configService;
+    private final DeviceMappingService    deviceMappingService;
     private final ModalityDataTypeService modalityDataTypeService;
 
     @Autowired
-    public CsvBasedResourceIdentifierService(final CsvImportConfigService configService, final ModalityDataTypeService modalityDataTypeService) {
+    public CsvBasedResourceIdentifierService(final CsvImportConfigService configService, final DeviceMappingService deviceMappingService,
+                                             final ModalityDataTypeService modalityDataTypeService) {
         this.configService           = configService;
+        this.deviceMappingService    = deviceMappingService;
         this.modalityDataTypeService = modalityDataTypeService;
     }
 
     @Override
     public Map<ScanResource, List<Path>> extractResource(final Path extractedArchive, final UserI user, final String projectId) {
+        return extractResource(extractedArchive, user, projectId, null);
+    }
+
+    /**
+     * When {@code deviceId} names a device, the manifest is read with the column mappings from the
+     * device's mapping CSV instead of the project or site-wide column mappings.
+     */
+    @Override
+    public Map<ScanResource, List<Path>> extractResource(final Path extractedArchive, final UserI user, final String projectId, final String deviceId) {
         log.info("Identifying scan resources from CSV manifest under {}", extractedArchive);
-        final List<CsvColumnMapping> mappings = configService.getColumnMappings(user, projectId);
+        final List<CsvColumnMapping> mappings;
+        if (StringUtils.isNotBlank(deviceId)) {
+            log.info("Reading the CSV manifest with the column mappings of device {}", deviceId);
+            mappings = deviceMappingService.getColumnMappings(projectId, deviceId);
+        } else {
+            mappings = configService.getColumnMappings(user, projectId);
+        }
         final MappingContext         context  = new MappingContext(mappings, modalityDataTypeService.getModalityMappings().values());
         final Path                   root     = findManifestDirectory(extractedArchive).orElseThrow(() -> new IllegalStateException(
                 "No CSV manifest (*.csv) was found at the root of the archive or of its single top-level folder"));
@@ -339,7 +359,21 @@ public class CsvBasedResourceIdentifierService implements ResourceIdentifierServ
         if (!Files.exists(resolved)) {
             throw new IllegalStateException("CSV row " + rowNumber + " path \"" + csvPath + "\" does not exist in the archive");
         }
+        // Zipping a folder without its contents leaves only the folder's entry, which would import an empty resource
+        if (Files.isDirectory(resolved) && !containsFiles(resolved)) {
+            throw new IllegalStateException("CSV row " + rowNumber + " path \"" + csvPath + "\" is a folder with no files in the archive");
+        }
         return resolved;
+    }
+
+    private static boolean containsFiles(final Path directory) {
+        try (final Stream<Path> stream = Files.walk(directory)) {
+            return stream.filter(Files::isRegularFile)
+                         .map(file -> file.getFileName().toString())
+                         .anyMatch(name -> !name.startsWith(".") && !IGNORED_ENTRIES.contains(name));
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to scan " + directory + " for files", e);
+        }
     }
 
     /**

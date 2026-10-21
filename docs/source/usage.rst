@@ -45,6 +45,16 @@ Importing the archive
    lists every modality configured with a session data type, most common first;
    type in its search box to filter the list (e.g. typing ``us`` jumps to
    ``US``).
+#. Optionally choose the **Device** that produced the data. The drop-down lists the
+   devices available to the project (see :doc:`administration`). With a device
+   selected, the archive's CSV manifest is read with that device's columns
+   instead of the project's CSV column mappings, the device's modality is
+   preselected as the primary modality when it is configured, and a link
+   downloads a blank manifest template with the device's columns. A device can
+   only be used with a CSV manifest: an archive without one is rejected. Uploads
+   through the XAPI name a device with the ``device`` parameter of
+   ``POST /data/services/import``; an unknown device, or one whose mapping has
+   problems, is rejected with HTTP 400.
 #. Choose how session structure is determined:
 
    * **Extract From Structure (Default)** uses the CSV manifest service; the

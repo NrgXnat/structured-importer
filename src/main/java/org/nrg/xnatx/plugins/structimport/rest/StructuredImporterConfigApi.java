@@ -22,9 +22,12 @@ import org.nrg.xdat.security.helpers.Roles;
 import org.nrg.xdat.security.services.RoleHolder;
 import org.nrg.xdat.security.services.UserManagementServiceI;
 import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
+import org.nrg.xnatx.plugins.structimport.models.DeviceMapping;
+import org.nrg.xnatx.plugins.structimport.models.DeviceMappingDetail;
 import org.nrg.xnatx.plugins.structimport.models.ModalityMapping;
 import org.nrg.xnatx.plugins.structimport.models.PropertyDisplayMapping;
 import org.nrg.xnatx.plugins.structimport.services.CsvImportConfigService;
+import org.nrg.xnatx.plugins.structimport.services.DeviceMappingService;
 import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.nrg.xnatx.plugins.structimport.services.impl.csv.CsvManifestTemplate;
 import org.nrg.xnatx.plugins.structimport.services.impl.csv.PropertyDisplayMappingValidator;
@@ -44,17 +47,20 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.nrg.xdat.security.helpers.AccessLevel.Admin;
 import static org.nrg.xdat.security.helpers.AccessLevel.Authenticated;
 import static org.springframework.web.bind.annotation.RequestMethod.DELETE;
 import static org.springframework.web.bind.annotation.RequestMethod.GET;
 import static org.springframework.web.bind.annotation.RequestMethod.POST;
+import static org.springframework.web.bind.annotation.RequestMethod.PUT;
 
 /**
  * XAPI controller for managing the structured importer's CSV column-mapping
- * configuration at the site and project level. Backs the corresponding site
- * admin and project settings Spawner panels.
+ * and device configuration at the site and project level. Backs the
+ * corresponding site admin and project settings Spawner panels, and the
+ * device drop-down of the compressed uploader.
  *
  * <p>The configuration is exchanged as a small object with a single
  * {@code columnMappings} field whose value is the mapping list serialized as a
@@ -73,6 +79,7 @@ public class StructuredImporterConfigApi extends AbstractXapiRestController {
     private static final MediaType TEXT_CSV_UTF8 = new MediaType("text", "csv", StandardCharsets.UTF_8);
 
     private final CsvImportConfigService  configService;
+    private final DeviceMappingService    deviceMappingService;
     private final ModalityDataTypeService modalityDataTypeService;
     private final ObjectMapper            mapper;
 
@@ -80,9 +87,11 @@ public class StructuredImporterConfigApi extends AbstractXapiRestController {
     public StructuredImporterConfigApi(final UserManagementServiceI userManagementService,
                                        final RoleHolder roleHolder,
                                        final CsvImportConfigService configService,
+                                       final DeviceMappingService deviceMappingService,
                                        final ModalityDataTypeService modalityDataTypeService) {
         super(userManagementService, roleHolder);
         this.configService           = configService;
+        this.deviceMappingService    = deviceMappingService;
         this.modalityDataTypeService = modalityDataTypeService;
         this.mapper                  = new ObjectMapper();
         this.mapper.findAndRegisterModules();
@@ -294,6 +303,220 @@ public class StructuredImporterConfigApi extends AbstractXapiRestController {
         configService.deleteColumnMappings(getSessionUser(), Scope.Project, projectId);
         log.info("User {} deleted the CSV column mappings for project {}", getSessionUser().getUsername(), projectId);
         return ResponseEntity.ok().build();
+    }
+
+    @ApiOperation(value = "Returns the site-wide devices and their mapping CSVs. Until a site administrator changes them, these are the devices bundled with the plugin.",
+                  response = DeviceMapping.class, responseContainer = "List")
+    @ApiResponses({@ApiResponse(code = 200, message = "The site-wide devices."),
+                   @ApiResponse(code = 403, message = "Not authorized to view the site configuration."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/device-mappings", method = GET, restrictTo = Admin, produces = MediaType.APPLICATION_JSON_VALUE)
+    public List<DeviceMapping> getSiteDevices() {
+        return deviceMappingService.getDevices(Scope.Site, null);
+    }
+
+    @ApiOperation(value = "Returns a site-wide device with its mapping CSV parsed: the rows, the column mappings imports naming the device read manifests with, and any problems or warnings.",
+                  response = DeviceMappingDetail.class)
+    @ApiResponses({@ApiResponse(code = 200, message = "The device."),
+                   @ApiResponse(code = 403, message = "Not authorized to view the site configuration."),
+                   @ApiResponse(code = 404, message = "No site-wide device has that ID."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/device-mappings/{deviceId}", method = GET, restrictTo = Admin, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> getSiteDevice(@ApiParam(value = "The ID of the device.", required = true) @PathVariable final String deviceId) {
+        return siteDevice(deviceId).<ResponseEntity<?>>map(device -> ResponseEntity.ok(deviceMappingService.describe(device)))
+                                   .orElseGet(() -> deviceNotFound(deviceId, null));
+    }
+
+    @ApiOperation(value = "Adds a site-wide device, or replaces the site-wide device with this ID.", response = DeviceMappingDetail.class)
+    @ApiResponses({@ApiResponse(code = 200, message = "The stored device."),
+                   @ApiResponse(code = 400, message = "The device or its mapping CSV is invalid; the response body lists the problems."),
+                   @ApiResponse(code = 403, message = "Not authorized to change the site configuration."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/device-mappings/{deviceId}", method = PUT, restrictTo = Admin, consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> saveSiteDevice(@ApiParam(value = "The ID of the device.", required = true) @PathVariable final String deviceId,
+                                            @RequestBody final DeviceMapping device) {
+        return saveDevice(Scope.Site, null, deviceId, device);
+    }
+
+    @ApiOperation(value = "Deletes a site-wide device. Project devices with the same ID are kept.")
+    @ApiResponses({@ApiResponse(code = 200, message = "The device was deleted."),
+                   @ApiResponse(code = 403, message = "Not authorized to change the site configuration."),
+                   @ApiResponse(code = 404, message = "No site-wide device has that ID."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/device-mappings/{deviceId}", method = DELETE, restrictTo = Admin, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> deleteSiteDevice(@ApiParam(value = "The ID of the device.", required = true) @PathVariable final String deviceId) {
+        if (!deviceMappingService.deleteDevice(getSessionUser(), Scope.Site, null, deviceId)) {
+            return deviceNotFound(deviceId, null);
+        }
+        log.info("User {} deleted the site-wide device {}", getSessionUser().getUsername(), deviceId);
+        return ResponseEntity.ok().build();
+    }
+
+    @ApiOperation(value = "Downloads a site-wide device's mapping CSV.")
+    @ApiResponses({@ApiResponse(code = 200, message = "The mapping CSV."),
+                   @ApiResponse(code = 403, message = "Not authorized to view the site configuration."),
+                   @ApiResponse(code = 404, message = "No site-wide device has that ID."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/device-mappings/{deviceId}/csv", method = GET, restrictTo = Admin, produces = TEXT_CSV)
+    public ResponseEntity<?> getSiteDeviceCsv(@ApiParam(value = "The ID of the device.", required = true) @PathVariable final String deviceId) {
+        return siteDevice(deviceId).<ResponseEntity<?>>map(StructuredImporterConfigApi::deviceCsv).orElseGet(() -> deviceNotFound(deviceId, null));
+    }
+
+    @ApiOperation(value = "Downloads a blank CSV manifest whose header row holds the columns of a site-wide device's mapping.")
+    @ApiResponses({@ApiResponse(code = 200, message = "The CSV manifest template."),
+                   @ApiResponse(code = 400, message = "The device's mapping CSV can't be used for imports."),
+                   @ApiResponse(code = 403, message = "Not authorized to view the site configuration."),
+                   @ApiResponse(code = 404, message = "No site-wide device has that ID."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/device-mappings/{deviceId}/template", method = GET, restrictTo = Admin, produces = TEXT_CSV)
+    public ResponseEntity<?> getSiteDeviceManifestTemplate(@ApiParam(value = "The ID of the device.", required = true) @PathVariable final String deviceId) {
+        return siteDevice(deviceId).<ResponseEntity<?>>map(device -> deviceManifestTemplate(device, null)).orElseGet(() -> deviceNotFound(deviceId, null));
+    }
+
+    @ApiOperation(value = "Returns the devices available for imports into the project: the site-wide devices, with any project device of the same ID in its place, followed by the project's own devices. Each device's scope says where it is stored.",
+                  response = DeviceMapping.class, responseContainer = "List")
+    @ApiResponses({@ApiResponse(code = 200, message = "The devices available to the project."),
+                   @ApiResponse(code = 403, message = "Not authorized to view the project configuration."),
+                   @ApiResponse(code = 404, message = "The project does not exist."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/projects/{projectId}/device-mappings", method = GET, restrictTo = Authenticated, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> getProjectDevices(@ApiParam(value = "The ID of the project.", required = true) @PathVariable final String projectId) {
+        final ResponseEntity<?> denied = verifyProjectAccess(projectId, false);
+        if (denied != null) {
+            return denied;
+        }
+        return ResponseEntity.ok(deviceMappingService.getEffectiveDevices(projectId));
+    }
+
+    @ApiOperation(value = "Returns a device available for imports into the project, with its mapping CSV parsed.", response = DeviceMappingDetail.class)
+    @ApiResponses({@ApiResponse(code = 200, message = "The device."),
+                   @ApiResponse(code = 403, message = "Not authorized to view the project configuration."),
+                   @ApiResponse(code = 404, message = "The project does not exist or no device available to it has that ID."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/projects/{projectId}/device-mappings/{deviceId}", method = GET, restrictTo = Authenticated, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> getProjectDevice(@ApiParam(value = "The ID of the project.", required = true) @PathVariable final String projectId,
+                                              @ApiParam(value = "The ID of the device.", required = true) @PathVariable final String deviceId) {
+        final ResponseEntity<?> denied = verifyProjectAccess(projectId, false);
+        if (denied != null) {
+            return denied;
+        }
+        return deviceMappingService.getEffectiveDevice(projectId, deviceId)
+                                   .<ResponseEntity<?>>map(device -> ResponseEntity.ok(deviceMappingService.describe(device)))
+                                   .orElseGet(() -> deviceNotFound(deviceId, projectId));
+    }
+
+    @ApiOperation(value = "Adds a device to the project, or replaces the project's device with this ID. A project device with the same ID as a site-wide device replaces it for imports into the project.",
+                  response = DeviceMappingDetail.class)
+    @ApiResponses({@ApiResponse(code = 200, message = "The stored device."),
+                   @ApiResponse(code = 400, message = "The device or its mapping CSV is invalid; the response body lists the problems."),
+                   @ApiResponse(code = 403, message = "Not authorized to change the project configuration."),
+                   @ApiResponse(code = 404, message = "The project does not exist."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/projects/{projectId}/device-mappings/{deviceId}", method = PUT, restrictTo = Authenticated, consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> saveProjectDevice(@ApiParam(value = "The ID of the project.", required = true) @PathVariable final String projectId,
+                                               @ApiParam(value = "The ID of the device.", required = true) @PathVariable final String deviceId,
+                                               @RequestBody final DeviceMapping device) {
+        final ResponseEntity<?> denied = verifyProjectAccess(projectId, false);
+        if (denied != null) {
+            return denied;
+        }
+        return saveDevice(Scope.Project, projectId, deviceId, device);
+    }
+
+    @ApiOperation(value = "Deletes the project's device with this ID. When it replaced a site-wide device, the site-wide device applies to the project again.")
+    @ApiResponses({@ApiResponse(code = 200, message = "The device was deleted."),
+                   @ApiResponse(code = 403, message = "Not authorized to administer the project configuration."),
+                   @ApiResponse(code = 404, message = "The project does not exist or has no device of its own with that ID."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/projects/{projectId}/device-mappings/{deviceId}", method = DELETE, restrictTo = Authenticated, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> deleteProjectDevice(@ApiParam(value = "The ID of the project.", required = true) @PathVariable final String projectId,
+                                                 @ApiParam(value = "The ID of the device.", required = true) @PathVariable final String deviceId) {
+        final ResponseEntity<?> denied = verifyProjectAccess(projectId, true);
+        if (denied != null) {
+            return denied;
+        }
+        if (!deviceMappingService.deleteDevice(getSessionUser(), Scope.Project, projectId, deviceId)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Project " + projectId + " has no device of its own with the ID \"" + deviceId + "\"");
+        }
+        log.info("User {} deleted the device {} from project {}", getSessionUser().getUsername(), deviceId, projectId);
+        return ResponseEntity.ok().build();
+    }
+
+    @ApiOperation(value = "Downloads the mapping CSV of a device available for imports into the project.")
+    @ApiResponses({@ApiResponse(code = 200, message = "The mapping CSV."),
+                   @ApiResponse(code = 403, message = "Not authorized to view the project configuration."),
+                   @ApiResponse(code = 404, message = "The project does not exist or no device available to it has that ID."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/projects/{projectId}/device-mappings/{deviceId}/csv", method = GET, restrictTo = Authenticated, produces = TEXT_CSV)
+    public ResponseEntity<?> getProjectDeviceCsv(@ApiParam(value = "The ID of the project.", required = true) @PathVariable final String projectId,
+                                                 @ApiParam(value = "The ID of the device.", required = true) @PathVariable final String deviceId) {
+        final ResponseEntity<?> denied = verifyProjectAccess(projectId, false);
+        if (denied != null) {
+            return denied;
+        }
+        return deviceMappingService.getEffectiveDevice(projectId, deviceId).<ResponseEntity<?>>map(StructuredImporterConfigApi::deviceCsv)
+                                   .orElseGet(() -> deviceNotFound(deviceId, projectId));
+    }
+
+    @ApiOperation(value = "Downloads a blank CSV manifest whose header row holds the columns of the mapping of a device available for imports into the project.")
+    @ApiResponses({@ApiResponse(code = 200, message = "The CSV manifest template."),
+                   @ApiResponse(code = 400, message = "The device's mapping CSV can't be used for imports."),
+                   @ApiResponse(code = 403, message = "Not authorized to view the project configuration."),
+                   @ApiResponse(code = 404, message = "The project does not exist or no device available to it has that ID."),
+                   @ApiResponse(code = 500, message = "An unexpected error occurred.")})
+    @XapiRequestMapping(value = "/projects/{projectId}/device-mappings/{deviceId}/template", method = GET, restrictTo = Authenticated, produces = TEXT_CSV)
+    public ResponseEntity<?> getProjectDeviceManifestTemplate(@ApiParam(value = "The ID of the project.", required = true) @PathVariable final String projectId,
+                                                              @ApiParam(value = "The ID of the device.", required = true) @PathVariable final String deviceId) {
+        final ResponseEntity<?> denied = verifyProjectAccess(projectId, false);
+        if (denied != null) {
+            return denied;
+        }
+        return deviceMappingService.getEffectiveDevice(projectId, deviceId).<ResponseEntity<?>>map(device -> deviceManifestTemplate(device, projectId))
+                                   .orElseGet(() -> deviceNotFound(deviceId, projectId));
+    }
+
+    private Optional<DeviceMapping> siteDevice(final String deviceId) {
+        return deviceMappingService.getDevices(Scope.Site, null).stream().filter(device -> StringUtils.equals(device.getId(), deviceId)).findFirst();
+    }
+
+    ResponseEntity<?> saveDevice(final Scope scope, final String projectId, final String deviceId, final DeviceMapping device) {
+        if (device == null) {
+            return ResponseEntity.badRequest().body("No device was submitted.");
+        }
+        if (StringUtils.isBlank(device.getId())) {
+            device.setId(deviceId);
+        } else if (!StringUtils.equals(device.getId().trim(), deviceId)) {
+            return ResponseEntity.badRequest().body("The device ID \"" + device.getId().trim() + "\" in the request body doesn't match the ID \"" + deviceId + "\" in the URL.");
+        }
+        final List<String> problems = deviceMappingService.validate(device);
+        if (!problems.isEmpty()) {
+            return ResponseEntity.badRequest().body(String.join("\n", problems));
+        }
+        final DeviceMapping stored = deviceMappingService.saveDevice(getSessionUser(), scope, projectId, device);
+        log.info("User {} saved the device {} {}", getSessionUser().getUsername(), deviceId, projectId == null ? "at the site level" : "for project " + projectId);
+        return ResponseEntity.ok(deviceMappingService.describe(stored));
+    }
+
+    private ResponseEntity<?> deviceManifestTemplate(final DeviceMapping device, final String projectId) {
+        final DeviceMappingDetail detail = deviceMappingService.describe(device);
+        if (!detail.getProblems().isEmpty()) {
+            return ResponseEntity.badRequest().body("The mapping CSV of the device \"" + device.getName() + "\" can't be used for imports:\n" + String.join("\n", detail.getProblems()));
+        }
+        return ResponseEntity.ok()
+                             .contentType(TEXT_CSV_UTF8)
+                             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + CsvManifestTemplate.filename(projectId, device.getId(), LocalDateTime.now()) + "\"")
+                             .body(CsvManifestTemplate.build(detail.getColumnMappings()));
+    }
+
+    private static ResponseEntity<?> deviceNotFound(final String deviceId, final String projectId) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body("No device with the ID \"" + deviceId + "\" is available" + (projectId == null ? " at the site level" : " to project " + projectId));
+    }
+
+    private static ResponseEntity<?> deviceCsv(final DeviceMapping device) {
+        return ResponseEntity.ok()
+                             .contentType(TEXT_CSV_UTF8)
+                             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + device.getId() + "-mapping.csv\"")
+                             .body(StringUtils.defaultString(device.getCsv()));
     }
 
     /**

@@ -1,0 +1,21 @@
+"Source Parameter","Source Section","XNAT Column","XNAT Property",Required,Transform,Notes
+(constant),,"Scan ID",xnat:imageScanData/ID,yes,"constant: 1",
+(constant),,Modality,xnat:imageScanData/modality,yes,"constant: PET","Modality code the structured importer configures for PET"
+study,hdr,"Series Description",xnat:imageScanData/series_description,yes,copy,
+"(user input)",,"Session Label",xnat:imageSessionData/label,yes,"default: <study>_<yyyyMMdd>",
+scan_time,hdr,"Start Date",xnat:imageScanData/start_date,no,"format MM/dd/yyyy",
+scan_time,hdr,"Start Time",xnat:imageScanData/startTime,no,"format h:mm a",
+subject_identifier,hdr,"Subject ID",xnat:imageSessionData/subject_ID,yes,copy,
+subject_weight,hdr,"Subject Weight (g)",xnat:subjectData/demographics[@xsi:type=xnat:demographicData]/weight,no,"convert to g using subject_weight_units",
+"(user input)",,Path,,yes,"path of the .img and .img.hdr files",
+(constant),,"Scan Type",xnat:imageScanData/type,no,"constant: PET",
+model,hdr,"Scanner Model",xnat:imageScanData/scanner/model,no,copy,"Numeric model code; map to a name if needed"
+(constant),,"Scanner Manufacturer",xnat:imageScanData/scanner/manufacturer,no,"constant: Siemens",
+total_frames,hdr,Frames,xnat:imageScanData/frames,no,integer,
+injected_compound,hdr,Tracer,xnat:petSessionData/tracer/name,no,copy,"Session-level field"
+dose,hdr,"Tracer Dose",xnat:petSessionData/tracer/dose,no,"convert using dose_units","Session-level field"
+isotope,hdr,Isotope,xnat:petSessionData/tracer/isotope,no,copy,"Session-level field"
+pixel_size_x,hdr,"Voxel Size X (mm)",xnat:petScanData/parameters/voxelRes/x,no,number,
+pixel_size_y,hdr,"Voxel Size Y (mm)",xnat:petScanData/parameters/voxelRes/y,no,number,
+pixel_size_z,hdr,"Voxel Size Z (mm)",xnat:petScanData/parameters/voxelRes/z,no,number,
+(constant),,"Resource Name",xnat:abstractResource/label,no,"constant: RECON",

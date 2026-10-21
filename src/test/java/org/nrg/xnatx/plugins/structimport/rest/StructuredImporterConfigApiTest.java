@@ -7,6 +7,7 @@ import org.nrg.xdat.security.services.RoleHolder;
 import org.nrg.xdat.security.services.UserManagementServiceI;
 import org.nrg.xnatx.plugins.structimport.models.CsvColumnMapping;
 import org.nrg.xnatx.plugins.structimport.services.CsvImportConfigService;
+import org.nrg.xnatx.plugins.structimport.services.DeviceMappingService;
 import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -48,7 +49,7 @@ public class StructuredImporterConfigApiTest {
         // like the real service, report nothing stored at any scope unless a test says otherwise
         when(configService.getColumnMappings(any(Scope.class), nullable(String.class))).thenReturn(null);
         when(configService.getDefaultColumnMappings()).thenReturn(DEFAULTS);
-        api = new StructuredImporterConfigApi(mock(UserManagementServiceI.class), mock(RoleHolder.class), configService, mock(ModalityDataTypeService.class));
+        api = new StructuredImporterConfigApi(mock(UserManagementServiceI.class), mock(RoleHolder.class), configService, mock(DeviceMappingService.class), mock(ModalityDataTypeService.class));
     }
 
     @Test

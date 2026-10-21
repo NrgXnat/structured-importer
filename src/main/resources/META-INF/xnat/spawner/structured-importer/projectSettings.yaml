@@ -10,6 +10,7 @@ projectSettings:
         structuredImporterSettings: Structured Importer
     contents:
         ${csvColumnMappingsProjectTab}
+        ${deviceMappingsProjectTab}
 
 csvColumnMappingsProjectTab:
     kind: tab
@@ -68,6 +69,34 @@ csvColumnMappingsProjectManage:
                         <b>Disable</b> temporarily turns off this project's mappings; they are retained and can be
                         restored by saving them again. <b>Delete</b> removes them. In either case, imports into this
                         project fall back to the site-wide configuration. (Project owners only.)
+
+deviceMappingsProjectTab:
+    kind: tab
+    name: deviceMappingsProjectTab
+    label: Device Mappings
+    group: structuredImporterSettings
+    contents:
+        ${deviceMappingsProjectPanel}
+        ${deviceMappingsProjectScript}
+
+deviceMappingsProjectPanel:
+    kind: panel
+    name: deviceMappingsProjectPanel
+    label: Project Device Mappings
+    contents:
+        deviceMappingsProjectIntro:
+            tag: div.description
+            content: >
+                The devices uploads into this project can name. When an upload names a device, its CSV manifest is
+                read with the device's mapping instead of the CSV column mappings. Site devices are listed with this
+                project's own devices; <b>Customize</b> copies a site device into the project, and the copy replaces
+                it for imports into this project. Deleting a project device requires project owner access.
+        deviceMappingsProjectTable:
+            tag: div#structured-importer-project-devices
+
+# The ?v= query parameter busts browser caches; bump it whenever the script changes.
+deviceMappingsProjectScript:
+    tag: script|src="~/scripts/xnat/plugin/structured-importer/deviceMappings.js?v=1.0.0"
 
 # The ?v= query parameter busts browser caches; bump it whenever the script changes.
 csvColumnMappingsProjectScript:

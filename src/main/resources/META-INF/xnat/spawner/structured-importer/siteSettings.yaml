@@ -10,6 +10,7 @@ siteSettings:
         structuredImporterTabGroup: Structured Importer
     contents:
         ${csvColumnMappingsTab}
+        ${deviceMappingsTab}
         ${propertyDisplayMappingsTab}
 
 ####
@@ -51,6 +52,32 @@ csvColumnMappingsPanel:
                 This configuration applies to every project that does not define its own project-level mappings.
                 Changes take effect when you click Save.
 
+deviceMappingsTab:
+    kind: tab
+    name: deviceMappingsTab
+    label: Device Mappings
+    group: structuredImporterTabGroup
+    active: false
+    contents:
+        ${deviceMappingsPanel}
+        ${deviceMappingsScript}
+
+deviceMappingsPanel:
+    kind: panel
+    name: deviceMappingsPanel
+    label: Site-wide Device Mappings
+    contents:
+        deviceMappingsIntro:
+            tag: div.description
+            content: >
+                Each device has a mapping CSV that says which columns of a CSV import manifest hold the device's
+                metadata and which XNAT properties they fill. When an upload names a device, its manifest is read with
+                the device's mapping instead of the CSV column mappings. Site devices are available to every project;
+                a project can add its own devices or customize a site device in its project settings. The devices
+                bundled with the plugin are added the first time XNAT starts with it.
+        deviceMappingsTable:
+            tag: div#structured-importer-site-devices
+
 propertyDisplayMappingsTab:
     kind: tab
     name: propertyDisplayMappingsTab
@@ -74,6 +101,10 @@ propertyDisplayMappingsPanel:
                 projects. Deleting a mapping does not change stored column mappings that reference its property.
         propertyDisplayMappingsTable:
             tag: div#structured-importer-display-mappings
+
+# The ?v= query parameter busts browser caches; bump it whenever the script changes.
+deviceMappingsScript:
+    tag: script|src="~/scripts/xnat/plugin/structured-importer/deviceMappings.js?v=1.0.0"
 
 # The ?v= query parameter busts browser caches; bump it whenever the script changes.
 csvColumnMappingsScript:

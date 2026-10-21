@@ -2,7 +2,9 @@ package org.nrg.xnatx.plugins.structimport.services.impl.composite;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.nrg.xft.security.UserI;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService.ScanResource;
 import org.nrg.xnatx.plugins.structimport.services.impl.csv.CsvBasedResourceIdentifierService;
@@ -18,16 +20,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.sameInstance;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class ManifestAwareResourceIdentifierServiceTest {
+
+    @Rule
+    public ExpectedException thrown = ExpectedException.none();
 
     private CsvBasedResourceIdentifierService      csvService;
     private SimpleResourceIdentifierService        simpleService;
@@ -45,7 +52,7 @@ public class ManifestAwareResourceIdentifierServiceTest {
         service       = new ManifestAwareResourceIdentifierService(csvService, simpleService);
         user          = mock(UserI.class);
         root          = Files.createTempDirectory("manifest-aware-test");
-        when(csvService.extractResource(any(Path.class), any(UserI.class), anyString())).thenReturn(csvResult);
+        when(csvService.extractResource(any(Path.class), any(UserI.class), anyString(), nullable(String.class))).thenReturn(csvResult);
         when(simpleService.extractResource(any(Path.class), any(UserI.class), anyString())).thenReturn(simpleResult);
     }
 
@@ -70,7 +77,7 @@ public class ManifestAwareResourceIdentifierServiceTest {
         final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
 
         assertThat(result, sameInstance(csvResult));
-        verify(csvService).extractResource(root, user, "PROJ");
+        verify(csvService).extractResource(root, user, "PROJ", null);
         verify(simpleService, never()).extractResource(any(Path.class), any(UserI.class), anyString());
     }
 
@@ -82,7 +89,7 @@ public class ManifestAwareResourceIdentifierServiceTest {
 
         assertThat(result, sameInstance(simpleResult));
         verify(simpleService).extractResource(root, user, "PROJ");
-        verify(csvService, never()).extractResource(any(Path.class), any(UserI.class), anyString());
+        verify(csvService, never()).extractResource(any(Path.class), any(UserI.class), anyString(), nullable(String.class));
     }
 
     @Test
@@ -93,7 +100,7 @@ public class ManifestAwareResourceIdentifierServiceTest {
         final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ");
 
         assertThat(result, sameInstance(csvResult));
-        verify(csvService).extractResource(root, user, "PROJ");
+        verify(csvService).extractResource(root, user, "PROJ", null);
         verify(simpleService, never()).extractResource(any(Path.class), any(UserI.class), anyString());
     }
 
@@ -107,7 +114,7 @@ public class ManifestAwareResourceIdentifierServiceTest {
 
         service.extractResource(root, user, "PROJ");
 
-        verify(csvService).extractResource(root, user, "PROJ");
+        verify(csvService).extractResource(root, user, "PROJ", null);
         verify(simpleService, never()).extractResource(any(Path.class), any(UserI.class), anyString());
     }
 
@@ -123,7 +130,7 @@ public class ManifestAwareResourceIdentifierServiceTest {
         service.extractResource(root, user, "PROJ");
 
         verify(simpleService).extractResource(root, user, "PROJ");
-        verify(csvService, never()).extractResource(any(Path.class), any(UserI.class), anyString());
+        verify(csvService, never()).extractResource(any(Path.class), any(UserI.class), anyString(), nullable(String.class));
     }
 
     @Test
@@ -135,6 +142,29 @@ public class ManifestAwareResourceIdentifierServiceTest {
         service.extractResource(root, user, "PROJ");
 
         verify(simpleService).extractResource(root, user, "PROJ");
-        verify(csvService, never()).extractResource(any(Path.class), any(UserI.class), anyString());
+        verify(csvService, never()).extractResource(any(Path.class), any(UserI.class), anyString(), nullable(String.class));
+    }
+
+    @Test
+    public void passesTheDeviceToTheCsvService() throws IOException {
+        Files.write(root.resolve("manifest.csv"), "Path\na".getBytes(StandardCharsets.UTF_8));
+
+        final Map<ScanResource, List<Path>> result = service.extractResource(root, user, "PROJ", "bruker-skyscan-1172");
+
+        assertThat(result, sameInstance(csvResult));
+        verify(csvService).extractResource(root, user, "PROJ", "bruker-skyscan-1172");
+    }
+
+    @Test
+    public void deviceWithoutManifestIsRejectedRatherThanIgnored() throws IOException {
+        Files.createDirectories(root.resolve("1/MR/NIFTI"));
+
+        thrown.expect(IllegalStateException.class);
+        thrown.expectMessage(containsString("bruker-skyscan-1172"));
+        try {
+            service.extractResource(root, user, "PROJ", "bruker-skyscan-1172");
+        } finally {
+            verify(simpleService, never()).extractResource(any(Path.class), any(UserI.class), anyString());
+        }
     }
 }

@@ -32,6 +32,7 @@ import org.nrg.xnat.restlet.util.XNATRestConstants;
 import org.nrg.xnat.services.archive.CatalogService;
 import org.nrg.xnatx.plugins.structimport.models.ModalityMapping;
 import org.nrg.xnatx.plugins.structimport.models.PropertyTargets;
+import org.nrg.xnatx.plugins.structimport.services.DeviceMappingService;
 import org.nrg.xnatx.plugins.structimport.services.ModalityDataTypeService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService;
 import org.nrg.xnatx.plugins.structimport.services.ResourceIdentifierService.ScanResource;
@@ -68,6 +69,7 @@ public class StructuredImporter extends ImporterHandlerA {
     private static final String PARAM_SUBJECT          = "subject";
     private static final String PARAM_SESSION          = "session";
     private static final String PARAM_PRIMARY_MODALITY = "primary-modality";
+    private static final String PARAM_DEVICE           = "device";
     private static final String ROOT_URI               = "/archive/experiments/";
     private static final String RESOURCE_URI           = "/resources/%s/files";
 
@@ -85,6 +87,7 @@ public class StructuredImporter extends ImporterHandlerA {
     private final String                    subjectLabel;
     private final String                    sessionLabel;
     private final String                    primaryModality;
+    private final String                    deviceId;
 
     private ResourceIdentifierService resourceIdentifierService;
     private boolean                   validated;
@@ -114,6 +117,7 @@ public class StructuredImporter extends ImporterHandlerA {
         this.subjectLabel                  = (String) parameters.get(PARAM_SUBJECT);
         this.sessionLabel                  = (String) parameters.get(PARAM_SESSION);
         this.primaryModality               = (String) parameters.get(PARAM_PRIMARY_MODALITY);
+        this.deviceId                      = StringUtils.trimToNull((String) parameters.get(PARAM_DEVICE));
     }
 
     /**
@@ -156,7 +160,10 @@ public class StructuredImporter extends ImporterHandlerA {
             ArchiveExtractor.extractNested(getWorkingDirectory());
             processing("Extracted file " + getFilename() + " into folder " + getWorkingDirectory());
 
-            final Map<ScanResource, List<Path>> resources = resourceIdentifierService.extractResource(getWorkingDirectory(), getUser(), getProjectId());
+            if (getDeviceId() != null) {
+                processing("Reading the CSV manifest with the mapping for device " + getDeviceId());
+            }
+            final Map<ScanResource, List<Path>> resources = resourceIdentifierService.extractResource(getWorkingDirectory(), getUser(), getProjectId(), getDeviceId());
             processing("Identified " + resources.size() + " scan resource(s) in " + getWorkingDirectory());
 
             CustomLabelingValidator.validate(resources.keySet(), getSubjectLabel(), getSessionLabel());
@@ -487,7 +494,27 @@ public class StructuredImporter extends ImporterHandlerA {
             throw new ClientException("User " + getUsername() + " cannot edit project " + projectId);
         }
         resourceIdentifierService = resolveResourceIdentifierService();
+        if (deviceId != null) {
+            validateDevice();
+        }
         validated = true;
+    }
+
+    /**
+     * Rejects an unknown device, or one whose mapping CSV can't drive an import, while the request is
+     * still being handled. A device's mapping applies to a CSV manifest, so it can't be combined with
+     * the directory-walking service.
+     */
+    private void validateDevice() throws ClientException {
+        if (StringUtils.equals(resourceIdentifierServiceName, ResourceIdentifierSelector.SIMPLE_IDENTIFIER_SERVICE)) {
+            throw new ClientException("The parameter " + PARAM_DEVICE + " can't be used with the " + resourceIdentifierServiceName
+                                      + " resource identifier, which reads the archive's directory layout rather than a CSV manifest");
+        }
+        try {
+            XDAT.getContextService().getBean(DeviceMappingService.class).getColumnMappings(projectId, deviceId);
+        } catch (IllegalStateException e) {
+            throw new ClientException("Invalid parameter " + PARAM_DEVICE + ": " + e.getMessage(), e);
+        }
     }
 
     private ResourceIdentifierService resolveResourceIdentifierService() throws ClientException {

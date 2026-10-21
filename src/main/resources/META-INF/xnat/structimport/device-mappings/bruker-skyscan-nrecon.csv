@@ -1,0 +1,27 @@
+"Source Parameter","Source Section","XNAT Column","XNAT Property",Required,Transform,Notes
+(constant),,"Scan ID",xnat:imageScanData/ID,yes,"constant: 1","Next free scan number in the session"
+(constant),,Modality,xnat:imageScanData/modality,yes,"constant: CT","DICOM modality code for micro-CT"
+"Filename Prefix",Acquisition,"Series Description",xnat:imageScanData/series_description,yes,copy,"Raw projection prefix, e.g. Cry1 KO"
+"(user input)",,"Session Label",xnat:imageSessionData/label,yes,"default: <Filename Prefix>_<yyyyMMdd>, spaces replaced with _","Not in the log; confirm the session label"
+"Study Date and Time",Acquisition,"Start Date",xnat:imageScanData/start_date,no,"parse MMM d, yyyy HH:mm:ss; format MM/dd/yyyy",
+"Study Date and Time",Acquisition,"Start Time",xnat:imageScanData/startTime,no,"parse MMM d, yyyy HH:mm:ss; format h:mm a","Seconds are dropped"
+"(user input)",,"Subject ID",xnat:imageSessionData/subject_ID,yes,,"Not in the log"
+"(user input)",,"Subject Weight (g)",xnat:subjectData/demographics[@xsi:type=xnat:demographicData]/weight,no,,"Not in the log"
+"Output Directory",Reconstruction,Path,,yes,"replace with the local path of the files","Windows path on the scanner PC; RAW rows use Data directory"
+(constant),,"Scan Type",xnat:imageScanData/type,no,"constant: microCT","Site-defined scan type"
+"Instrument S/N",System,Scanner,xnat:imageScanData/scanner,no,copy,"Serial number used as scanner identifier"
+(constant),,"Scanner Manufacturer",xnat:imageScanData/scanner/manufacturer,no,"constant: Bruker","SkyScan is a Bruker product line"
+Scanner,System,"Scanner Model",xnat:imageScanData/scanner/model,no,"insert space: Skyscan1172 to SkyScan 1172",
+Software,System,"Scanner Software Version",xnat:imageScanData/scanner/softwareVersion,no,"remove leading 'Version '",
+"Sections Count",Reconstruction,Frames,xnat:imageScanData/frames,no,integer,"Number of reconstructed slices"
+"HU Calibration",Reconstruction,Note,xnat:imageScanData/note,no,"if OFF: 'HU calibration OFF; values are attenuation coefficients'",
+"Pixel Size (um)",Reconstruction,"Voxel Size X (mm)",xnat:ctScanData/parameters/voxelRes/x,no,"divide by 1000","Isotropic voxels"
+"Pixel Size (um)",Reconstruction,"Voxel Size Y (mm)",xnat:ctScanData/parameters/voxelRes/y,no,"divide by 1000",
+"Pixel Size (um)",Reconstruction,"Voxel Size Z (mm)",xnat:ctScanData/parameters/voxelRes/z,no,"divide by 1000 (times Section to Section Step)",
+"Result Image Width (pixels)",Reconstruction,"FOV X (pixels)",xnat:ctScanData/parameters/fov/x,no,integer,
+"Result Image Height (pixels)",Reconstruction,"FOV Y (pixels)",xnat:ctScanData/parameters/fov/y,no,integer,
+"Source Voltage (kV)",Acquisition,kVp,xnat:ctScanData/parameters/kvp,no,number,
+(constant),,"Resource Name",xnat:abstractResource/label,no,"constant: RAW or RECON","RAW for projections, RECON for slices"
+"Image Format",Acquisition,"Resource Format",xnat:resourceCatalog/format,no,copy,"RAW resource (usually TIFF)"
+"Result File Type",Reconstruction,"Resource Format",xnat:resourceCatalog/format,no,copy,"RECON resource (BMP, TIFF, PNG or JPG)"
+(constant),,"Resource Content",xnat:resourceCatalog/content,no,"constant: RAW or RECON",

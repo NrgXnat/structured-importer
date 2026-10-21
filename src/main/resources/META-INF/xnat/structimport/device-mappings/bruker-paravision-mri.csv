@@ -1,0 +1,27 @@
+"Source Parameter","Source Section","XNAT Column","XNAT Property",Required,Transform,Notes
+VisuExperimentNumber,visu_pars,"Scan ID",xnat:imageScanData/ID,yes,copy,"ParaVision experiment (E) number"
+(constant),,Modality,xnat:imageScanData/modality,yes,"constant: MR",
+VisuAcquisitionProtocol,visu_pars,"Series Description",xnat:imageScanData/series_description,yes,copy,
+VisuStudyId,visu_pars,"Session Label",xnat:imageSessionData/label,yes,"default: VisuStudyId, spaces replaced with _","Confirm the session label"
+VisuAcqDate,visu_pars,"Start Date",xnat:imageScanData/start_date,no,"format MM/dd/yyyy","Falls back to VisuStudyDate if absent"
+VisuAcqDate,visu_pars,"Start Time",xnat:imageScanData/startTime,no,"format h:mm a",
+VisuSubjectId,visu_pars,"Subject ID",xnat:imageSessionData/subject_ID,yes,copy,
+VisuSubjectWeight,visu_pars,"Subject Weight (g)",xnat:subjectData/demographics[@xsi:type=xnat:demographicData]/weight,no,"multiply by 1000","ParaVision stores weight in kg"
+"(user input)",,Path,,yes,"path of the exported DICOM or NIfTI files","Scan folder of the ParaVision study"
+(constant),,"Scan Type",xnat:imageScanData/type,no,"constant: MR",
+VisuStation,visu_pars,Scanner,xnat:imageScanData/scanner,no,copy,
+VisuManufacturer,visu_pars,"Scanner Manufacturer",xnat:imageScanData/scanner/manufacturer,no,copy,
+VisuCreatorVersion,visu_pars,"Scanner Software Version",xnat:imageScanData/scanner/softwareVersion,no,copy,
+VisuCoreFrameCount,visu_pars,Frames,xnat:imageScanData/frames,no,integer,
+VisuAcqRepetitionTime,visu_pars,"TR (ms)",xnat:mrScanData/parameters/tr,no,number,
+VisuAcqEchoTime,visu_pars,"TE (ms)",xnat:mrScanData/parameters/te,no,"first value if a list",
+VisuAcqInversionTime,visu_pars,"TI (ms)",xnat:mrScanData/parameters/ti,no,number,"Only for inversion-recovery sequences"
+VisuAcqFlipAngle,visu_pars,"Flip Angle",xnat:mrScanData/parameters/flip,no,number,
+VisuAcqSequenceName,visu_pars,Sequence,xnat:mrScanData/parameters/sequence,no,copy,
+"VisuCoreExtent / VisuCoreSize",visu_pars,"Voxel Size X (mm)",xnat:mrScanData/parameters/voxelRes/x,no,"extent[0] / size[0]",
+"VisuCoreExtent / VisuCoreSize",visu_pars,"Voxel Size Y (mm)",xnat:mrScanData/parameters/voxelRes/y,no,"extent[1] / size[1]",
+VisuCoreFrameThickness,visu_pars,"Voxel Size Z (mm)",xnat:mrScanData/parameters/voxelRes/z,no,number,"For 3D use extent[2] / size[2]"
+VisuCoreSize,visu_pars,"FOV X (pixels)",xnat:mrScanData/parameters/fov/x,no,size[0],
+VisuCoreSize,visu_pars,"FOV Y (pixels)",xnat:mrScanData/parameters/fov/y,no,size[1],
+PVM_FrqWork,method,"Field Strength (T)",xnat:mrScanData/fieldStrength,no,"first value in MHz divided by 42.577",
+(constant),,"Resource Name",xnat:abstractResource/label,no,"constant: DICOM or NIFTI",

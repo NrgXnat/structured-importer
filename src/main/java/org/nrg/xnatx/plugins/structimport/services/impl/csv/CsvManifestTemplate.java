@@ -33,7 +33,18 @@ public final class CsvManifestTemplate {
      * @param timestamp when the template was generated
      */
     public static String filename(final String projectId, final LocalDateTime timestamp) {
-        return NAME_PREFIX + (projectId == null ? "" : "-" + projectId) + "-" + TIMESTAMP_FORMAT.format(timestamp) + ".csv";
+        return filename(projectId, null, timestamp);
+    }
+
+    /**
+     * Names a downloaded device template, e.g. {@code struct-import-template-PROJECT-bruker-skyscan-1172-20261008_103133.csv}.
+     *
+     * @param projectId the project the template is for, or {@code null} for a site device
+     * @param deviceId  the device whose columns the template holds, or {@code null} for the column mappings
+     * @param timestamp when the template was generated
+     */
+    public static String filename(final String projectId, final String deviceId, final LocalDateTime timestamp) {
+        return NAME_PREFIX + (projectId == null ? "" : "-" + projectId) + (deviceId == null ? "" : "-" + deviceId) + "-" + TIMESTAMP_FORMAT.format(timestamp) + ".csv";
     }
 
     public static String build(final List<CsvColumnMapping> mappings) {
