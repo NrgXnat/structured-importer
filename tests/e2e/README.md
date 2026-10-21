@@ -90,7 +90,7 @@ collection time.
 | `import/columnMappingPrecedence.spec.ts` | 8 | That a project column mapping actually governs an import, disable and delete falling back to the site mapping, and re-importing an existing session label |
 | `import/resourceIdentifierSelection.spec.ts` | 7 | Which identifier service runs for each parameter combination, proved by feeding in an archive only one service can read |
 | `import/directoryRis.spec.ts` | 4 | Directory archives becoming sessions, scans, resources and files |
-| `import/modalityDataType.spec.ts` | 4 | Modality configuration shape, ordering and completeness |
+| `import/modalityDataType.spec.ts` | 6 | Modality configuration shape and ordering, a PETMR session holding PET and MR scans, and refused scan directories leaving no session behind |
 | `import/csvRis.spec.ts` | 3 | Every mapped manifest column reaching its XNAT property |
 | `import/duplicateScanIds.spec.ts` | 2 | Two manifest rows naming the same scan: combining resources when the modality agrees, refusing the import when it does not |
 | `api/propertyDisplayMappings.spec.ts` | 8 | The property drop-down: add, rename, delete, one-display-per-property |
